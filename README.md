@@ -1,13 +1,13 @@
 ## Culinary Order Management (ERPNext v15)
 
-Sipariş ayrıştırma ve yönlendirme uygulaması. WooCommerce’ten gelen ana Satış Siparişi (Culinary şirketi) otomatik işlenir; kalemler mutfak/marka şirketlerine bölünerek ayrı çocuk Satış Siparişlerine dönüştürülür.
+Sipariş ayrıştırma ve yönlendirme uygulaması. WooCommerce’ten gelen ana Satış Siparişi (Culinary şirketi) otomatik işlenir; kalemler mutfak/marka şirketlerine bölünerek ayrı child Satış Siparişlerine dönüştürülür.
 
 ### Özellikler
 - `after_submit` ile otomatik bölme ve yönlendirme
 - Mutfak yönlendirmesi: müşteri posta kodu → en yakın "Mutfak - …" şirketi
 - Marka yönlendirmesi: ürün `brand` → ilgili şirket (Brand Default/Brand adı=Company)
-- Çocuk SO adları şirket kısaltmasıyla başlar; şirket bazlı seri (ör. `MBER-00001`)
-- Çocuk SO üzerinde `source_web_so` ile kaynak ana SO referansı
+- child SO adları şirket kısaltmasıyla başlar; şirket bazlı seri (ör. `MBER-00001`)
+- child SO üzerinde `source_web_so` ile kaynak ana SO referansı
 - Yönetim kolaylığı: `after_install/after_migrate` ile Admin üzerindeki Company User Permission kayıtları temizlenir (görünürlük sorunlarını önler)
 
 ### Kurulum
