@@ -70,6 +70,10 @@ app_license = "mit"
 # automatically create page for each record of this doctype
 # website_generators = ["Web Page"]
 
+# Fixtures
+# ----------
+fixtures = ["custom_field.json"]
+
 # Jinja
 # ----------
 
@@ -83,7 +87,7 @@ app_license = "mit"
 # ------------
 
 # before_install = "culinary_order_management.install.before_install"
-# after_install = "culinary_order_management.install.after_install"
+after_install = "culinary_order_management.culinary_order_management.setup.ensure_admin_company_permissions_clear"
 
 # Uninstallation
 # ------------
@@ -115,15 +119,10 @@ app_license = "mit"
 
 # Permissions
 # -----------
-# Permissions evaluated in scripted ways
-
-# permission_query_conditions = {
-# 	"Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
-# }
-#
-# has_permission = {
-# 	"Event": "frappe.desk.doctype.event.event.has_permission",
-# }
+# Parent (split) Sales Order'ları varsayılan listelerden gizle
+# Permission query conditions removed - split functionality disabled
+permission_query_conditions = {
+}
 
 # DocType Class
 # ---------------
@@ -137,13 +136,17 @@ app_license = "mit"
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+doc_events = {
+	"Sales Order": {
+		"after_submit": "culinary_order_management.culinary_order_management.sales_order_hooks.split_order_to_companies"
+	}
+}
+
+# Item hooks: set supplier display for list view
+doc_events.setdefault("Item", {})
+doc_events["Item"].update({
+	"before_save": "culinary_order_management.culinary_order_management.item_hooks.set_supplier_display_on_item",
+})
 
 # Scheduled Tasks
 # ---------------
@@ -170,6 +173,7 @@ app_license = "mit"
 # -------
 
 # before_tests = "culinary_order_management.install.before_tests"
+after_migrate = "culinary_order_management.culinary_order_management.setup.ensure_admin_company_permissions_clear"
 
 # Overriding Methods
 # ------------------------------

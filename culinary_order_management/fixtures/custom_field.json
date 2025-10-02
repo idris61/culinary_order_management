@@ -1,0 +1,48 @@
+[
+  
+  {
+    "dt": "Sales Order",
+    "doctype": "Custom Field",
+    "fieldname": "source_web_so",
+    "fieldtype": "Link",
+    "label": "Source Web SO",
+    "options": "Sales Order",
+    "insert_after": "source_culinary_so",
+    "hidden": 0,
+    "read_only": 1,
+    "no_copy": 1,
+    "owner": "Administrator",
+    "name": "Sales Order-source_web_so"
+  },
+  
+  {
+    "doctype": "Custom Field",
+    "name": "Item-supplier_display",
+    "dt": "Item",
+    "label": "Tedarikçi",
+    "fieldname": "supplier_display",
+    "fieldtype": "Data",
+    "insert_after": "brand",
+    "read_only": 1,
+    "in_list_view": 1,
+    "no_copy": 1,
+    "depends_on": "eval:doc.name"
+  },
+  
+  
+  {
+    "doctype": "Custom Field",
+    "name": "Item-is_kitchen_item",
+    "dt": "Item",
+    "label": "Mutfak Ürünü",
+    "fieldname": "is_kitchen_item",
+    "fieldtype": "Check",
+    "insert_after": "item_group",
+    "allow_on_submit": 1,
+    "reqd": 0,
+    "read_only": 0,
+    "hidden": 0,
+    "default": "0",
+    "description": "Bu ürün mutfak tarafından karşılanır."
+  }
+]
