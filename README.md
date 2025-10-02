@@ -29,7 +29,6 @@ pre-commit install
 ```
 
 ### İletişim
-Geliştirici: Idris Gemici  
 E‑posta: idris.gemici61@gmail.com
 
 ### Lisans
