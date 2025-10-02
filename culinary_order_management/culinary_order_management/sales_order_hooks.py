@@ -3,6 +3,7 @@ import re
 from frappe.model.naming import make_autoname
 from frappe.utils import flt
 from frappe.model.document import Document
+from frappe import whitelist
 
 
 def split_order_to_companies(doc, method):
@@ -28,19 +29,31 @@ def split_order_to_companies(doc, method):
         if kitchen_items:
             customer_pin = getattr(customer_address, "pincode", None)
             kitchen_company = find_nearest_kitchen(customer_pin, doc.customer)
-            if kitchen_company and not child_order_exists(doc.name, kitchen_company):
+            if kitchen_company and not child_order_exists(doc, kitchen_company):
                 create_company_sales_order(doc, kitchen_items, kitchen_company, "kitchen")
         
         # Marka siparişlerini oluştur
         for brand_name, items in brand_items.items():
             brand_company = get_brand_company(brand_name)
-            if brand_company and not child_order_exists(doc.name, brand_company):
+            if brand_company and not child_order_exists(doc, brand_company):
                 create_company_sales_order(doc, items, brand_company, brand_name)
         
         # İleride ana SO üzerinde özet göstermek istersek buraya eklenecek
         
     except Exception as e:
         frappe.log_error(f"Sipariş ayrıştırma hatası: {str(e)}", "Culinary Order Split Error")
+
+
+@whitelist()
+def split_order_to_companies_api(name: str):
+    """Sales Order formundaki butondan manuel tetikleme.
+    Doc submit edilmiş olmalı.
+    """
+    doc = frappe.get_doc("Sales Order", name)
+    if doc.docstatus != 1:
+        frappe.throw("Sipariş onaylanmış olmalı (Submitted).")
+    split_order_to_companies(doc, "after_submit")
+    return {"ok": True}
 
 
 def get_customer_delivery_address(customer, shipping_address_name):
@@ -174,6 +187,25 @@ def create_company_sales_order(parent_so, items, target_company, order_type):
         new_so.delivery_date = parent_so.delivery_date or parent_so.transaction_date
         new_so.shipping_address_name = parent_so.shipping_address_name
         new_so.customer_address = parent_so.customer_address
+        # Müşterinin Satınalma Siparişi (Customer PO) - Benzersiz olmalı
+        # Child SO'larda ana SO'nun PO numarasını company ile birleştir
+        import re
+        base_po = None
+        if hasattr(parent_so, "woocommerce_id") and parent_so.woocommerce_id:
+            # WooCommerce ID varsa direkt kullan
+            base_po = parent_so.woocommerce_id
+        elif hasattr(parent_so, "po_no") and parent_so.po_no:
+            # Ana SO'nun po_no'su varsa onu kullan
+            base_po = parent_so.po_no
+        else:
+            # SO adından number kısmını çıkar (WEB1-027703 -> 027703 -> 27703)
+            match = re.search(r'-(\d+)$', parent_so.name)
+            if match:
+                base_po = match.group(1).lstrip('0') or match.group(1)  # Leading zero kaldır
+        
+        # Company kısaltmasıyla benzersiz PO oluştur
+        company_abbr = _company_prefix(target_company)
+        new_so.po_no = f"{base_po}-{company_abbr}"  # 27703-MBER
 
         # Satırları kopyala
         for item in items:
@@ -207,13 +239,12 @@ def create_company_sales_order(parent_so, items, target_company, order_type):
         new_so.submit()
 
         # Referans bilgilerini kaydet
-        # (source_culinary_so) kaldırıldı
-        # Web’den gelen SO kimliği (ana SO’nun adı) çocukta saklansın
+        # Source Web SO: Ana SO'nun adını kaydet (WEB1-027703)
         frappe.db.set_value(
             "Sales Order",
             new_so.name,
             "source_web_so",
-            parent_so.name,
+            parent_so.name,  # WEB1-027703
         )
 
         frappe.log_error(
@@ -229,12 +260,13 @@ def create_company_sales_order(parent_so, items, target_company, order_type):
         raise
 
 
-def child_order_exists(parent_so_name: str, company: str) -> bool:
-    """Aynı kaynak SO ve şirket için çocuk SO zaten var mı?"""
+def child_order_exists(parent_so: Document, company: str) -> bool:
+    """Aynı parent SO name ve şirket için çocuk SO var mı?"""
+    source_id = parent_so.name  # Child SO'larda parent_so.name kaydediliyor
     return bool(
         frappe.get_all(
             "Sales Order",
-            filters={"source_culinary_so": parent_so_name, "company": company},
+            filters={"source_web_so": source_id, "company": company},
             limit=1,
         )
     )

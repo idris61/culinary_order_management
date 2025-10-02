@@ -43,7 +43,7 @@ app_license = "mit"
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-# doctype_js = {"doctype" : "public/js/doctype.js"}
+doctype_js = {"Sales Order" : "public/js/sales_order.js"}
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -142,11 +142,7 @@ doc_events = {
 	}
 }
 
-# Item hooks: set supplier display for list view
-doc_events.setdefault("Item", {})
-doc_events["Item"].update({
-	"before_save": "culinary_order_management.culinary_order_management.item_hooks.set_supplier_display_on_item",
-})
+# Item hooks removed - supplier_display field was unused
 
 # Scheduled Tasks
 # ---------------
