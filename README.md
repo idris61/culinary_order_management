@@ -1,41 +1,36 @@
-### Culinary Order Management
+## Culinary Order Management (ERPNext v15)
 
-Order ayrıştırma, yönlendirme ve komisyon yönetimi için özel uygulama
+Sipariş ayrıştırma ve yönlendirme uygulaması. WooCommerce’ten gelen ana Satış Siparişi (Culinary şirketi) otomatik işlenir; kalemler mutfak/marka şirketlerine bölünerek ayrı çocuk Satış Siparişlerine dönüştürülür.
 
-### Installation
+### Özellikler
+- `after_submit` ile otomatik bölme ve yönlendirme
+- Mutfak yönlendirmesi: müşteri posta kodu → en yakın "Mutfak - …" şirketi
+- Marka yönlendirmesi: ürün `brand` → ilgili şirket (Brand Default/Brand adı=Company)
+- Çocuk SO adları şirket kısaltmasıyla başlar; şirket bazlı seri (ör. `MBER-00001`)
+- Çocuk SO üzerinde `source_web_so` ile kaynak ana SO referansı
+- Yönetim kolaylığı: `after_install/after_migrate` ile Admin üzerindeki Company User Permission kayıtları temizlenir (görünürlük sorunlarını önler)
 
-You can install this app using the [bench](https://github.com/frappe/bench) CLI:
-
+### Kurulum
 ```bash
-cd $PATH_TO_YOUR_BENCH
-bench get-app $URL_OF_THIS_REPO --branch develop
-bench install-app culinary_order_management
+bench get-app https://github.com/idris61/culinary_order_management.git
+bench --site your-site.local install-app culinary_order_management
 ```
 
-### Contributing
+### Kullanım Notları
+- Mutfak şirketlerinin varsayılan adreslerinde `pincode` dolu olmalıdır.
+- Ürün kartlarında `is_kitchen_item` alanı mutfak ürünleri için işaretlenmelidir.
+- Marka yönlendirmesi için Brand → Company eşlemesi yapılmalıdır (Brand Default veya Brand adı=Company).
 
-This app uses `pre-commit` for code formatting and linting. Please [install pre-commit](https://pre-commit.com/#installation) and enable it for this repository:
-
+### Geliştirme
+Bu depo `pre-commit` ile format/lint çalıştırmaya hazırdır.
 ```bash
 cd apps/culinary_order_management
 pre-commit install
 ```
 
-Pre-commit is configured to use the following tools for checking and formatting your code:
+### İletişim
+Geliştirici: Idris Gemici  
+E‑posta: idris.gemici61@gmail.com
 
-- ruff
-- eslint
-- prettier
-- pyupgrade
-
-### CI
-
-This app can use GitHub Actions for CI. The following workflows are configured:
-
-- CI: Installs this app and runs unit tests on every push to `develop` branch.
-- Linters: Runs [Frappe Semgrep Rules](https://github.com/frappe/semgrep-rules) and [pip-audit](https://pypi.org/project/pip-audit/) on every pull request.
-
-
-### License
-
-mit
+### Lisans
+MIT
