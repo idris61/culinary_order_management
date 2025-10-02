@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Proforma Invoice</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            font-size: 12px;
+            line-height: 1.4;
+            color: #333;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #2563eb;
+            padding-bottom: 20px;
+        }
+        
+        .company-info {
+            flex: 1;
+        }
+        
+        .company-name {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2563eb;
+            margin-bottom: 10px;
+        }
+        
+        .company-details {
+            color: #666;
+            line-height: 1.5;
+        }
+        
+        .document-title {
+            text-align: right;
+            flex: 1;
+        }
+        
+        .title {
+            font-size: 28px;
+            font-weight: bold;
+            color: #2563eb;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .document-info {
+            background-color: #f8fafc;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-radius: 8px;
+            border-left: 4px solid #2563eb;
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        
+        .info-label {
+            font-weight: bold;
+            color: #374151;
+            min-width: 120px;
+        }
+        
+        .info-value {
+            color: #1f2937;
+            flex: 1;
+            text-align: right;
+        }
+        
+        .billing-section {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+        }
+        
+        .billing-card {
+            flex: 1;
+            margin: 0 10px;
+            padding: 15px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            background-color: #f9fafb;
+        }
+        
+        .card-title {
+            font-weight: bold;
+            color: #2563eb;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 5px;
+        }
+        
+        .customer-details, .company-details {
+            line-height: 1.6;
+            color: #374151;
+        }
+        
+        .items-section {
+            margin-bottom: 30px;
+        }
+        
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #2563eb;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 8px;
+        }
+        
+        .supplier-group {
+            margin-bottom: 25px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .supplier-header {
+            background-color: #2563eb;
+            color: white;
+            padding: 12px 15px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0;
+        }
+        
+        .items-table th {
+            background-color: #f8fafc;
+            padding: 10px 12px;
+            text-align: left;
+            font-weight: bold;
+            color: #374151;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .items-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        
+        .text-right {
+            text-align: right;
+        }
+        
+        .supplier-total {
+            background-color: #fef3c7;
+            padding: 8px 12px;
+            font-weight: bold;
+            color: #92400e;
+            text-align: right;
+            border-top: 2px solid #f59e0b;
+        }
+        
+        .footer {
+            margin-top: 40px;
+            border-top: 2px solid #e5e7eb;
+            padding-top: 20px;
+        }
+        
+        .grand-total {
+            background-color: #dcfce7;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #16a34a;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .grand-total-amount {
+            font-size: 20px;
+            font-weight: bold;
+            color: #15803d;
+        }
+        
+        .disclaimer {
+            background-color: #fef3c7;
+            border: 1px solid #f59e0b;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        
+        .disclaimer-title {
+            font-weight: bold;
+            color: #92400e;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .disclaimer-text {
+            color: #92400e;
+            line-height: 1.5;
+        }
+        
+        @media print {
+            body { margin: 0; padding: 15px; }
+            .header { page-break-inside: avoid; }
+            .supplier-group { page-break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="company-info">
+            <div class="company-name">{{ company.company_name }}</div>
+            <div class="company-details">
+                {% if company.address_line_1 %}{{ company.address_line_1 }}<br>{% endif %}
+                {% if company.address_line_2 %}{{ company.address_line_2 }}<br>{% endif %}
+                {% if company.city %}{{ company.city }} {% endif %}
+                {% if company.state %}{{ company.state }} {% endif %}
+                {% if company.country %}{{ company.country }}<br>{% endif %}
+                {% if company.pincode %}Postal Code: {{ company.pincode }}<br>{% endif %}
+                {% if company.phone %}Phone: {{ company.phone }}<br>{% endif %}
+                {% if company.email %}Email: {{ company.email }}<br>{% endif %}
+                {% if company.website %}Website: {{ company.website }}{% endif %}
+            </div>
+        </div>
+        <div class="document-title">
+            <div class="title">PROFORMA INVOICE</div>
+            <div class="subtitle">Reference: {{ proforma.source_sales_order }}</div>
+        </div>
+    </div>
+
+    <!-- Document Information -->
+    <div class="document-info">
+        <div class="info-row">
+            <span class="info-label">Invoice Date:</span>
+            <span class="info-value">{{ today_str }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Due Date:</span>
+            <span class="info-value">{{ due_date_str }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Customer Reference:</span>
+            <span class="info-value">{{ parent_so.po_no if parent_so.po_no else 'N/A' }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Delivery Date:</span>
+            <span class="info-value">{{ delivery_date_str }}</span>
+        </div>
+    </div>
+
+    <!-- Billing Information -->
+    <div class="billing-section">
+        <div class="billing-card">
+            <div class="card-title">Bill To:</div>
+            <div class="customer-details">
+                <strong>{{ customer.customer_name }}</strong><br>
+                {% if customer.customer_type %}Type: {{ customer.customer_type }}<br>{% endif %}
+                {% set customer_address = customer.primary_address or customer.shipping_address_name %}
+                {% if customer_address %}
+                    {% set addr_doc = frappe.get_doc("Address", customer_address) %}
+                    {% if addr_doc.address_line_1 %}{{ addr_doc.address_line_1 }}<br>{% endif %}
+                    {% if addr_doc.address_line_2 %}{{ addr_doc.address_line_2 }}<br>{% endif %}
+                    {% if addr_doc.city %}{{ addr_doc.city }} {% endif %}
+                    {% if addr_doc.state %}{{ addr_doc.state }} {% endif %}
+                    {% if addr_doc.country %}{{ addr_doc.country }}<br>{% endif %}
+                    {% if addr_doc.pincode %}Postal Code: {{ addr_doc.pincode }}<br>{% endif %}
+                {% endif %}
+                {% if customer.mobile_no %}Phone: {{ customer.mobile_no }}<br>{% endif %}
+                {% if customer.email_id %}Email: {{ customer.email_id }}{% endif %}
+            </div>
+        </div>
+        
+        <div class="billing-card">
+            <div class="card-title">Company Details:</div>
+            <div class="company-details">
+                <strong>{{ company.company_name }}</strong><br>
+                {% if company.tax_id %}Tax ID: {{ company.tax_id }}<br>{% endif %}
+                {% if company.registration_details %}Registration: {{ company.registration_details }}<br>{% endif %}
+                {% if company.whatsapp_number %}WhatsApp: {{ company.whatsapp_number }}<br>{% endif %}
+                {% if company.fax_number %}Fax: {{ company.fax_number }}{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Items Section -->
+    <div class="items-section">
+        <div class="section-title">Items Details by Supplier</div>
+        
+        {% for company_name, items in items_by_company.items() %}
+        <div class="supplier-group">
+            <div class="supplier-header">
+                {{ company_name }} - Product Items
+            </div>
+            <table class="items-table">
+                <thead>
+                    <tr>
+                        <th style="width: 40%;">Item Description</th>
+                        <th style="width: 15%;">Item Code</th>
+                        <th style="width: 15%;" class="text-right">Qty</th>
+                        <th style="width: 15%;" class="text-right">Rate (€)</th>
+                        <th style="width: 15%;" class="text-right">Amount (€)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr>
+                        <td>{{ item.item_name }}</td>
+                        <td>{{ item.item_code }}</td>
+                        <td class="text-right">{{ item.qty }}</td>
+                        <td class="text-right">{{ "%.2f"|format(item.rate) }}</td>
+                        <td class="text-right">{{ "%.2f"|format(item.amount) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div class="supplier-total">
+                {{ company_name }} Total: €{{ "{:.2f}".format(items | sum(attribute='amount')) if (items | sum(attribute='amount')) else '0.00' }}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        <!-- Grand Total -->
+        <div class="grand-total">
+            <div style="font-size: 16px; color: #16a34a; margin-bottom: 5px;">GRAND TOTAL</div>
+            <div class="grand-total-amount">€{{ "{:.2f}".format(proforma.grand_total) if proforma.grand_total else '0.00' }}</div>
+        </div>
+
+        <!-- Disclaimer -->
+        <div class="disclaimer">
+            <div class="disclaimer-title">IMPORTANT NOTICE:</div>
+            <div class="disclaimer-text">
+                Bu belge proformadır; nihai faturalar tedarikçi şirketler (Mutfak/Marka) tarafından düzenlenecektir. 
+                Bu proforma muhtemel fiyatları göstermektedir ve bağlayıcı değildir. 
+                Kesin fiyatlar ve koşullar nihai faturada belirtilecektir.
+            </div>
+        </div>
+
+        <!-- Terms -->
+        {% if parent_so.terms %}
+        <div class="disclaimer">
+            <div class="disclaimer-title">TERMS & CONDITIONS:</div>
+            <div class="disclaimer-text">{{ parent_so.terms }}</div>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

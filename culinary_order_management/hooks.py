@@ -72,7 +72,7 @@ doctype_js = {"Sales Order" : "public/js/sales_order.js"}
 
 # Fixtures
 # ----------
-fixtures = ["custom_field.json"]
+fixtures = ["custom_field.json", "proforma_invoice.json"]
 
 # Jinja
 # ----------
@@ -121,8 +121,7 @@ after_install = "culinary_order_management.culinary_order_management.setup.ensur
 # -----------
 # Parent (split) Sales Order'ları varsayılan listelerden gizle
 # Permission query conditions removed - split functionality disabled
-permission_query_conditions = {
-}
+permission_query_conditions = {}
 
 # DocType Class
 # ---------------
@@ -137,9 +136,9 @@ permission_query_conditions = {
 # Hook on document methods and events
 
 doc_events = {
-	"Sales Order": {
-		"after_submit": "culinary_order_management.culinary_order_management.sales_order_hooks.split_order_to_companies"
-	}
+    "Sales Order": {
+        "after_submit": "culinary_order_management.culinary_order_management.sales_order_hooks.split_order_to_companies"
+    }
 }
 
 # Item hooks removed - supplier_display field was unused

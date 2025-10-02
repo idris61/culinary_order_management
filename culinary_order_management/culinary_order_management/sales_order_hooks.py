@@ -38,7 +38,12 @@ def split_order_to_companies(doc, method):
             if brand_company and not child_order_exists(doc, brand_company):
                 create_company_sales_order(doc, items, brand_company, brand_name)
         
-        # İleride ana SO üzerinde özet göstermek istersek buraya eklenecek
+        # Proforma oluştur
+        try:
+            from culinary_order_management.culinary_order_management.proforma_hooks import create_proforma_invoice
+            create_proforma_invoice(doc.name)
+        except Exception as proforma_error:
+            frappe.log_error(f"Proforma oluşturma hatası: {str(proforma_error)}", "Proforma Creation Error")
         
     except Exception as e:
         frappe.log_error(f"Sipariş ayrıştırma hatası: {str(e)}", "Culinary Order Split Error")
