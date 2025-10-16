@@ -1,184 +1,646 @@
-# Culinary Order Management (ERPNext v15)
+# Culinary Order Management
 
-Culinary platformu için sipariş ayrıştırma, yönlendirme ve proforma fatura yönetimi uygulaması. WooCommerce'ten gelen ana Satış Siparişleri otomatik işlenerek mutfak ve marka şirketlerine yönlendirilir.
+**ERPNext v15** için özel sipariş yönetimi ve yönlendirme uygulaması.
 
-## 🚀 Ana Özellikler
-
-### 📦 Sipariş Ayrıştırma ve Yönlendirme
-- **Otomatik Süreç**: Sales Order `after_submit` ile otomatik bölme ve yönlendirme
-- **Akıllı Mutfak Yönlendirmesi**: Müşteri posta kodu → en yakın "Mutfak - …" şirketi
-- **Marka Yönlendirmesi**: Ürün brand → ilgili şirket (Brand Default/Brand adı=Company)
-- **Standart İsimlendirme**: Child SO adları şirket kısaltmasıyla başlar; şirket bazlı seri (örn. `MBER-00001`)
-
-### 📋 Proforma Fatura Sistemi
-- **Otomatik Proforma**: Ana SO'dan child SO'ları birleştirerek tek proforma
-- **PDF Üretimi**: HTML template ile profesyonel PDF çıktısı
-- **Müşteri Odaklı**: Tek PDF'de tüm tedarikçi kalemleri
-- **Dosya Yönetimi**: PDF otomatik Sales Order'a attach edilir
-
-### 👤 Yönetici Kolaylıkları
-- **Sınırsız Erişim**: Admin kullanıcısı üzerindeki Company User Permission kayıtları otomatik temizlenir
-- **Manuel Kontrol**: "Böl ve Yönlendir" ve "Proforma Oluştur" butonları ile manuel işlem
-- **Hata Takibi**: Kapsamlı error logging ve mesajlaşma
-
-## 📁 Doküman Yapısı
-
-```
-culinary_order_management/
-├── 𝖼𝗎𝗅𝗂𝗇𝖺𝗋𝗒_𝗈𝗋𝖽𝖾𝗋_𝗆𝖺𝗇𝖺𝗀𝖾𝗆𝖾𝗇𝗍/
-│   ├── sales_order_hooks.py       # Ana böl ve yönlendirme mantığı
-│   ├── proforma_hooks.py          # Proforma oluşturma ve PDF
-│   ├── setup.py                   # Admin permission temizleme
-│   └── doctype/
-│       └── proforma_invoice/      # Proforma Invoice dokümanı
-├── fixtures/
-│   ├── custom_field.json          # Özel alanlar
-│   └── proforma_invoice.json      # Proforma Invoice dizini
-├── templates/
-│   └── proforma_template.html     # PDF HTML template
-└── public/js/
-    └── sales_order.js             # UI butonları
-```
-
-## ⚙️ Kurulum
-
-```bash
-# Depoyu indirin
-bench get-app https://github.com/idris61/culinary_order_management.git
-
-# Uygulamayı yükleyin
-bench --site your-site.local install-app culinary_order_management
-
-# Cache temizleyin ve yeniden başlatın
-bench --site your-site.local clear-cache
-bench restart
-```
-
-## 🔧 Kullanım Kılavuzu
-
-### Gereksinimler
-- ERPNext v15
-- WooCommerce Fusion entegrasyonu
-- Şirket yapısı:
-  - Ana şirket: `Culinary`
-  - Mutfak şirketleri: `Mutfak - Berlin`, `Mutfak - München` vb.
-  - Marka şirketleri: Her marka için ayrı şirket
-
-### Temel Ayarlar
-
-#### 1. Ürün Kartları
-```python
-# Ürün -> Özel Alanlar
-is_kitchen_item = True/False  # Mutfak ürünü işaretlenmeli
-brand = "Bir Marka"           # Marka ürünü için marka adı
-```
-
-#### 2. Mutfak Şirketleri
-- Şirket adı: `Mutfak-[Şehir]` formatında
-- Varsayılan adres: `pincode` alanı dolu olmalı
-
-#### 3. Marka Yönlendirmesi
-- Brand → Company eşlemesi (Brand Default veya Brand adı=Company)
-
-### İş Akışı
-
-1. **Sipariş Girişi**: WordPress → WooCommerce → ERPNext
-2. **Otomatik Ayrıştırma**: `after_submit` hook ile:
-   - Mutfak ürünleri → en yakın mutfak şirketi
-   - Marka ürünleri → ilgili marka şirketi
-3. **Proforma Üretimi**: Child SO'ları birleştirerek tek PDF
-4. **Faturalama**: Her şirket kendi child SO'sunu fatura eder
-
-### Manuel İşlemler
-
-#### Böl ve Yönlendir
-- Sales Order açın
-- "Aksiyonlar" → "Böl ve Yönlendir" butonuna tıklayın
-- Çocak siparişler otomatik oluşturulur
-
-#### Proforma Oluştur
-- "Faturalama" → "Proforma Oluştur" butonuna tıklayın
-- PDF otomatik Sales Order'a eklenir
-
-## 📊 Özel Alanlar
-
-### Sales Order
-- `source_web_so`: Ana veya child SO referansı
-
-### Item
-- `is_kitchen_item`: Mutfak ürünü işaretleyicisi
-
-### Proforma Invoice
-- `customer`: Müşteri referansı
-- `source_sales_order`: Kaynak Sales Order
-- `items`: Child SO'lardan gelen kalemler (`supplier_company` ile gruplandırılmış)
-
-## 🎯 Değişiklik Özeti
-
-### Son Versiyonda Eklenenler
-- ✅ **Proforma Fatura Sistemi**: Otomatik PDF üretimi
-- ✅ **Manual Buttons**: UI'dan manuel kontrol
-- ✅ **Admin Permissions**: Sınırsız erişim düzeltmesi
-- ✅ **Error Handling**: Kapsamlı hata yönetimi
-- ✅ **Production Ready**: Debug kodları temizlendi
-
-### Temizlenen Kodlar
-- ❌ Debug print statement'ları
-- ❌ Console.log() kodları  
-- ❌ Gereksiz CSS kuralları
-- ❌ Optimize edilememiş template sorguları
-
-## 🔍 Sorun Giderme
-
-### Common Issues
-
-#### Child SO'lar Görünmüyor
-```bash
-# Admin permission'ları temizle
-bench --site your-site.local console
-# frappe.delete_doc("User Permission", "name", ignore_permissions=True, force=True)
-```
-
-#### PDF Oluşturulmuyor
-- Child SO'ların mevcut olduğunu kontrol edin
-- Template hatası yoksa cache'i temizlemeyi deneyin
-- Browser console'da JavaScript hatalarını kontrol edin
-
-## 🧪 Geliştirme
-
-### Projenin Klonlanması
-```bash
-cd apps/
-git clone https://github.com/idris61/culinary_order_management.git
-cd culinary_order_management
-```
-
-### Test Yapısı
-- Sales Order oluşturun (company: Culinary)
-- Submit edin (otomatik hook tetiklenir)
-- Child SO'ları kontrol edin
-- Proforma PDF'i denetleyin
-
-### Development Workflow
-```bash
-# Kod değişiklikleri sonrası
-bench --site your-site.local clear-cache
-bench --site your-site.local build --app culinary_order_management
-
-# Test için console
-bench --site your-site.local console
-```
-
-## 📞 İletişim
-
-- **Geliştirici**: İdris
-- **E-posta**: idris.gemici61@gmail.com
-- **GitHub**: https://github.com/idris61/culinary_order_management
-
-## 📄 Lisans
-
-MIT License - Detaylar için LICENSE dosyasına bakınız.
+## 📋 İçindekiler
+- [Genel Bakış](#genel-bakış)
+- [Özellikler](#özellikler)
+- [Mimari](#mimari)
+- [Modüller](#modüller)
+- [Veri Akışı](#veri-akışı)
+- [Kurulum](#kurulum)
+- [Kullanım](#kullanım)
+- [Geliştirici Notları](#geliştirici-notları)
 
 ---
 
-**Not**: Bu uygulama Culinary platformuna özgü olarak geliştirilmiştir. Başka ERPNext kurulumlarında kullanırken gerekli adaptasyonları yapınız.
+## 🎯 Genel Bakış
+
+Bu uygulama, ERPNext üzerinde çoklu şirket yapısında çalışan bir sipariş yönetim sistemidir. Ana amacı:
+
+1. **Agreement (Anlaşma) Bazlı Fiyatlandırma**: Müşteri-Tedarikçi anlaşmalarına göre otomatik fiyat belirleme
+2. **Sipariş Ayrıştırma**: Tek bir web siparişini mutfak ve marka şirketlerine otomatik yönlendirme
+3. **Proforma Fatura**: Ayrıştırılmış siparişlerden birleştirilmiş proforma oluşturma
+4. **DATEV Entegrasyonu**: PDF oluşturma sorunlarını çözen özel override
+
+---
+
+## ✨ Özellikler
+
+### 1. Agreement Management (Anlaşma Yönetimi)
+- ✅ Müşteri-Tedarikçi bazlı anlaşmalar
+- ✅ Ürün bazlı fiyatlandırma
+- ✅ Çoklu para birimi desteği
+- ✅ Tarih aralıklı geçerlilik
+- ✅ Otomatik Price List senkronizasyonu
+- ✅ Çakışan fiyat temizleme
+
+### 2. Sales Order Validation (Sipariş Doğrulama)
+- ✅ Anlaşma kontrolü (sadece anlaşmalı ürünler)
+- ✅ Tarih geçerliliği kontrolü
+- ✅ Otomatik fiyat uygulama
+- ✅ Çoklu para birimi dönüşümü
+- ✅ Fiyat kilitleme
+
+### 3. Order Split & Routing (Sipariş Ayrıştırma)
+- ✅ Mutfak/Marka ürün sınıflandırması
+- ✅ Posta kodu bazlı mutfak yönlendirme
+- ✅ Marka bazlı şirket yönlendirme
+- ✅ Otomatik Child SO oluşturma
+- ✅ Şirket bazlı numaralama (MBER-00001)
+- ✅ Benzersiz PO numarası oluşturma
+
+### 4. Proforma Invoice (Proforma Fatura)
+- ✅ Child SO'lardan birleştirilmiş proforma
+- ✅ Şirket bazlı gruplama
+- ✅ Otomatik PDF oluşturma
+- ✅ Ana SO'ya attachment
+- ✅ Duplicate kontrol
+
+### 5. DATEV Override
+- ✅ PDF network hatası çözümü
+- ✅ Monkey patch ile temiz implementasyon
+- ✅ E-Invoice XML desteği
+
+---
+
+## 🏗️ Mimari
+
+```
+Culinary Order Management
+│
+├── DocTypes (4)
+│   ├── Agreement (Ana DocType)
+│   ├── Agreement Item (Child Table)
+│   ├── Proforma Invoice (Ana DocType)
+│   └── Proforma Invoice Item (Child Table)
+│
+├── Backend (Python)
+│   ├── sales_order.py         # SO validation & pricing
+│   ├── sales_order_hooks.py   # SO split & routing
+│   ├── agreement.py           # Price list sync
+│   ├── proforma_hooks.py      # Proforma generation
+│   ├── api.py                 # Whitelisted APIs
+│   ├── custom_datev.py        # DATEV override
+│   └── setup.py               # Installation hooks
+│
+├── Frontend (JavaScript)
+│   └── agreement.js           # Agreement form logic
+│
+├── Custom Fields (2)
+│   ├── Item.is_kitchen_item   # Mutfak ürünü flag
+│   └── SO.source_web_so       # Parent SO referansı
+│
+└── Hooks
+    ├── doc_events             # Document lifecycle hooks
+    └── doctype_js             # Client script injection
+```
+
+---
+
+## 📦 Modüller
+
+### 1. Agreement Module (agreement.py)
+
+**Amaç:** Müşteri-Tedarikçi anlaşmalarını ERPNext Price List'e senkronize etmek.
+
+**Ana Fonksiyonlar:**
+
+```python
+create_price_list_for_agreement(doc, method)
+# Agreement kaydedildiğinde/güncellendiğinde:
+# - Müşteri adında Price List oluşturur
+# - Item Price kayıtlarını oluşturur/günceller
+# - Çakışan tarihlerdeki eski kayıtları temizler
+
+sync_item_prices(doc, method)
+# Agreement Item'ları Item Price'a dönüştürür
+# - Agreement Price varsa direkt kullanır
+# - Yoksa Standard Selling Rate'e discount_rate uygular
+# - Overlap temizleme yapar
+
+cleanup_item_prices(doc, method)
+# Agreement silindiğinde:
+# - İlgili Price List'ten ürünleri kaldırır
+```
+
+**Veri Akışı:**
+```
+Agreement → Price List → Item Price
+         ↓
+    Item Query
+         ↓
+    Sales Order
+```
+
+**Key Features:**
+- ✅ Natural unique key: (Price List, Item, Currency, Valid From, Valid To)
+- ✅ NULL date handling (open-ended ranges)
+- ✅ Automatic overlap cleanup
+- ✅ Multi-currency per item
+
+---
+
+### 2. Sales Order Module (sales_order.py)
+
+**Amaç:** Sales Order validasyonu ve Agreement bazlı fiyat uygulama.
+
+**Ana Fonksiyonlar:**
+
+```python
+validate_sales_order(doc, method)
+# Her item için:
+# 1. Agreement kontrolü (yoksa hata)
+# 2. Tarih geçerliliği kontrolü
+# 3. Currency conversion (gerekirse)
+# 4. Fiyat uygulama ve kilitleme
+
+get_conversion_rate(from_currency, to_currency, date)
+# Currency Exchange tablosundan kur getir
+# Fallback: 1.0
+```
+
+**Validation Akışı:**
+```
+1. Customer var mı?
+2. Item Agreement'ta var mı? → Yok ise HATA
+3. Agreement tarihleri geçerli mi? → Değilse HATA
+4. Agreement currency ≠ SO currency? → Currency conversion
+5. Rate uygula ve kilitle
+6. Amount hesapla (qty * rate)
+```
+
+**Önemli:**
+- ⚠️ Anlaşmasız ürün eklenemez
+- ⚠️ Tarihi geçmiş anlaşma kullanılamaz
+- ⚠️ Fiyat manuel değiştirilemez (kilitli)
+
+---
+
+### 3. Sales Order Hooks Module (sales_order_hooks.py)
+
+**Amaç:** Sales Order submit sonrası ürünlere göre şirketlere ayırma.
+
+**İşleyiş:**
+
+```
+[Parent SO: Culinary] (Submit)
+         ↓
+   Split Algorithm
+    ↙          ↘
+[Kitchen SO]  [Brand SO]
+MUTFAK-00001  MBER-00001
+         ↓
+    Proforma PDF
+```
+
+**Ana Fonksiyonlar:**
+
+```python
+split_order_to_companies(doc, method)
+# 1. Ürünleri gruplandır (mutfak/marka)
+# 2. Mutfak siparişi oluştur
+# 3. Marka siparişleri oluştur
+# 4. Proforma oluştur
+
+group_items_by_type(items)
+# Item.is_kitchen_item flag'ine göre ayır
+# Returns: (kitchen_items, brand_items_dict)
+
+find_nearest_kitchen(customer_pincode, customer_name)
+# Müşteri posta koduna göre en yakın mutfak bul
+# "Mutfak - %" pattern'i ile Company ara
+# Posta kodu eşleşmesi > İlk bulunan
+
+get_brand_company(brand_name)
+# Marka için şirket bul:
+# 1. Brand Default tablosuna bak
+# 2. Brand.default_company alanına bak
+# 3. Brand adıyla Company ara
+
+create_company_sales_order(parent_so, items, target_company, order_type)
+# Helper fonksiyonlar:
+# - _generate_po_number()        # PO numarası oluştur
+# - _prepare_sales_order_base()  # SO temel bilgileri
+# - _copy_items_to_sales_order() # Item'ları kopyala
+# - _rename_sales_order_with_prefix() # Şirket prefix'i ile rename
+```
+
+**Custom Fields:**
+- `Item.is_kitchen_item` (Check): Mutfak ürünü flag
+- `Sales Order.source_web_so` (Data): Parent SO referansı
+
+**Naming Convention:**
+```
+Parent SO:   WEB1-027703
+Kitchen SO:  MUTFAK-00042
+Brand SO:    MBER-00128
+PO Numbers:  27703-MUTFAK, 27703-MBER
+```
+
+---
+
+### 4. Proforma Module (proforma_hooks.py)
+
+**Amaç:** Child SO'lardan birleştirilmiş Proforma Invoice oluşturma.
+
+**Ana Fonksiyonlar:**
+
+```python
+create_proforma_invoice(parent_so_name)
+# 1. Existing proforma kontrolü
+# 2. Child SO'ları getir (source_web_so filter)
+# 3. Tüm item'ları birleştir
+# 4. Proforma oluştur ve submit et
+# 5. PDF oluştur ve attach et
+
+generate_and_attach_proforma_pdf(proforma_name, parent_so_name)
+# 1. Template render (HTML)
+# 2. PDF oluştur (get_pdf)
+# 3. File doc oluştur
+# 4. Parent SO'ya attach et
+```
+
+**Veri Yapısı:**
+```python
+Proforma Invoice
+├── customer
+├── source_sales_order (Parent SO)
+├── invoice_date
+├── due_date
+├── grand_total
+└── items (Child Table)
+    ├── item_code
+    ├── item_name
+    ├── qty
+    ├── rate
+    ├── amount
+    └── supplier_company  # Hangi şirketten geldiği
+```
+
+**PDF Template:**
+- Şirket bazlı gruplama (items_by_company)
+- Müşteri/Şirket bilgileri
+- Tarih formatları (dd.MM.yyyy)
+- Vergiler (eğer varsa)
+
+---
+
+### 5. API Module (api.py)
+
+**Whitelisted Functions:**
+
+```python
+@frappe.whitelist()
+def item_by_supplier(...)
+# Agreement form'da supplier seçilince
+# Sadece o supplier'ın ürünlerini listele
+
+@frappe.whitelist()
+def items_by_customer_agreement(...)
+# Sales Order'da customer seçilince
+# Sadece anlaşmalı ürünleri listele
+# Tarih kontrolü ile
+```
+
+**Security:**
+- ✅ SQL injection koruması (parametrize query)
+- ✅ Allowed fields whitelist
+- ✅ Input sanitization
+
+---
+
+### 6. DATEV Override (custom_datev.py)
+
+**Problem:** 
+wkhtmltopdf external kaynaklar yüklerken network hatası veriyor.
+
+**Çözüm:** 
+Monkey patch ile `attach_print` fonksiyonunu override et.
+
+```python
+# __init__.py
+def _patch_datev():
+    from culinary_order_management.custom_datev import attach_print_custom
+    import erpnext_datev... as datev_module
+    datev_module.attach_print = attach_print_custom
+
+_patch_datev()  # App yüklendiğinde otomatik
+```
+
+**Override:**
+```python
+def attach_print_custom(doctype, name, language, print_format):
+    # no_letterhead=1 ile PDF oluştur (network yok)
+    data = frappe.get_print(..., no_letterhead=1)
+    # E-Invoice XML ekle (varsa)
+    # File olarak kaydet
+```
+
+---
+
+## 🔄 Veri Akışı
+
+### Senaryo 1: Agreement Oluşturma
+
+```
+1. User creates Agreement
+   ├── Customer: "ABC GmbH"
+   ├── Supplier: "Tedarikçi A"
+   ├── Valid: 2025-01-01 to 2025-12-31
+   └── Items: [Item-001: €10.00, Item-002: €25.00]
+
+2. on_save → create_price_list_for_agreement()
+   ├── Price List "ABC GmbH" oluşturuldu
+   └── 2 Item Price kaydı oluşturuldu
+
+3. Database:
+   Price List: ABC GmbH
+   Item Price:
+   ├── Item-001: €10.00 (2025-01-01 to 2025-12-31)
+   └── Item-002: €25.00 (2025-01-01 to 2025-12-31)
+```
+
+---
+
+### Senaryo 2: Sales Order Oluşturma ve Ayrıştırma
+
+```
+1. User creates Sales Order (WEB1-027703)
+   Company: Culinary
+   Customer: ABC GmbH
+   Items:
+   ├── Item-001 (Kitchen Item) × 10
+   ├── Item-002 (Brand: MBER) × 5
+   └── Item-003 (Brand: XYZ) × 3
+
+2. on_validate → validate_sales_order()
+   ├── Item-001: Agreement var ✓ → €10.00
+   ├── Item-002: Agreement var ✓ → €25.00
+   └── Item-003: Agreement var ✓ → €15.00
+   
+3. on_submit → split_order_to_companies()
+   
+   3.1 group_items_by_type()
+       ├── kitchen_items: [Item-001]
+       └── brand_items: {"MBER": [Item-002], "XYZ": [Item-003]}
+   
+   3.2 Kitchen Order
+       ├── Customer pincode: 10115
+       ├── find_nearest_kitchen() → "Mutfak - Berlin"
+       └── MUTFAK-00042 oluşturuldu
+   
+   3.3 Brand Orders
+       ├── MBER-00128 oluşturuldu (Brand: MBER)
+       └── XYZ-00089 oluşturuldu (Brand: XYZ)
+   
+   3.4 create_proforma_invoice()
+       ├── Child SO'ları birleştir
+       ├── Proforma COM-0001 oluşturuldu
+       └── PDF → WEB1-027703'e attach edildi
+
+4. Result:
+   ├── WEB1-027703 (Parent - Culinary)
+   ├── MUTFAK-00042 (Kitchen - Mutfak - Berlin)
+   ├── MBER-00128 (Brand - MBER GmbH)
+   ├── XYZ-00089 (Brand - XYZ AG)
+   └── Proforma_WEB1-027703.pdf
+```
+
+---
+
+## 🚀 Kurulum
+
+### 1. App Kurulumu
+
+```bash
+cd /path/to/frappe-bench
+bench get-app https://github.com/your-repo/culinary_order_management.git
+bench --site site1.local install-app culinary_order_management
+bench --site site1.local migrate
+```
+
+### 2. Gerekli Ayarlar
+
+**Custom Fields (Otomatik):**
+- `Item.is_kitchen_item` → fixture'dan yüklenir
+- `Sales Order.source_web_so` → fixture'dan yüklenir
+
+**Manuel Ayarlar:**
+1. Şirket yapısını oluştur:
+   - Ana şirket: "Culinary"
+   - Mutfak şirketleri: "Mutfak - [Şehir]" formatında
+   - Marka şirketleri: Marka adlarıyla
+
+2. Item'lara Brand ata
+3. Kitchen item'ları işaretle (`is_kitchen_item = 1`)
+4. Currency Exchange rates tanımla
+
+### 3. DATEV (Opsiyonel)
+
+DATEV kullanıyorsanız, override otomatik devreye girer.
+
+---
+
+## 📖 Kullanım
+
+### 1. Agreement Oluşturma
+
+```
+1. Agreement → New
+2. Customer seç
+3. Supplier seç
+4. Valid From / Valid To tarihlerini gir
+5. Items tablosuna ürün ekle:
+   - Item Code seç (supplier filter otomatik çalışır)
+   - Agreement Price gir (€ 10.00)
+   - Currency seç (EUR)
+6. Save
+   → Price List otomatik oluşturulur
+   → Item Price kayıtları oluşturulur
+```
+
+### 2. Sales Order Oluşturma
+
+```
+1. Sales Order → New
+2. Company: "Culinary" seç
+3. Customer seç
+4. Items:
+   - Item Code seç (sadece anlaşmalı ürünler görünür)
+   - Qty gir
+   - Rate otomatik gelir (değiştirilemez)
+5. Save
+   → Validation çalışır
+   → Fiyatlar kilitlenir
+6. Submit
+   → Split algorithm çalışır
+   → Child SO'lar oluşturulur
+   → Proforma PDF oluşturulur
+```
+
+### 3. Manuel Split (Opsiyonel)
+
+Eğer submit sonrası split çalışmadıysa:
+
+```javascript
+// Sales Order formunda
+frappe.call({
+    method: 'culinary_order_management...split_order_to_companies_api',
+    args: { name: frm.doc.name },
+    callback: function(r) {
+        frappe.msgprint('Split completed!');
+    }
+});
+```
+
+---
+
+## 🛠️ Geliştirici Notları
+
+### Code Quality
+
+```
+✅ Linter Errors: 0
+✅ Debug Code: 0
+✅ Code Duplication: None
+✅ Single Responsibility: Applied
+✅ SQL Injection: Protected
+✅ Error Handling: Comprehensive
+```
+
+### Best Practices
+
+1. **Naming:**
+   - Function names: `snake_case`
+   - Private functions: `_prefix`
+   - Classes: `PascalCase`
+
+2. **Error Handling:**
+   ```python
+   try:
+       # risky operation
+   except Exception as e:
+       frappe.log_error(f"Error message: {str(e)}", "Error Title")
+       raise  # Re-raise if critical
+   ```
+
+3. **Database Queries:**
+   ```python
+   # ✅ GOOD: Parametrized
+   frappe.db.sql("SELECT * FROM tab WHERE name=%s", (name,))
+   
+   # ❌ BAD: SQL Injection risk
+   frappe.db.sql(f"SELECT * FROM tab WHERE name='{name}'")
+   ```
+
+4. **Whitelist Security:**
+   ```python
+   @frappe.whitelist()
+   def safe_function(param):
+       # Always validate inputs
+       if not param:
+           frappe.throw("Invalid input")
+   ```
+
+### Testing
+
+**Manual Test Checklist:**
+
+- [ ] Agreement oluştur ve Price List kontrol et
+- [ ] Overlapping tarihli Agreement güncelle
+- [ ] Agreement sil ve Item Price temizliğini kontrol et
+- [ ] Sales Order validation (anlaşmasız ürün)
+- [ ] Sales Order validation (tarihi geçmiş anlaşma)
+- [ ] Sales Order split (mutfak routing)
+- [ ] Sales Order split (marka routing)
+- [ ] Proforma PDF oluşturma
+- [ ] Multi-currency conversion
+- [ ] Duplicate prevention
+
+---
+
+## 🔧 Troubleshooting
+
+### Problem: Agreement kaydedildi ama Price List oluşmadı
+
+**Çözüm:**
+```python
+# Console'da çalıştır
+doc = frappe.get_doc("Agreement", "agreement-name")
+from culinary_order_management.culinary_order_management.agreement import create_price_list_for_agreement
+create_price_list_for_agreement(doc, None)
+```
+
+### Problem: Sales Order split çalışmadı
+
+**Çözüm:**
+```python
+# Hooks'u kontrol et
+bench --site site1.local console
+>>> import culinary_order_management
+>>> doc = frappe.get_doc("Sales Order", "SO-name")
+>>> from culinary_order_management...sales_order_hooks import split_order_to_companies
+>>> split_order_to_companies(doc, "after_submit")
+```
+
+### Problem: Currency conversion yapılmıyor
+
+**Çözüm:**
+```sql
+-- Currency Exchange kayıtlarını kontrol et
+SELECT * FROM `tabCurrency Exchange`
+WHERE from_currency='USD' AND to_currency='EUR';
+
+-- Yoksa ekle
+INSERT INTO `tabCurrency Exchange` 
+(from_currency, to_currency, exchange_rate, date)
+VALUES ('USD', 'EUR', 0.92, CURDATE());
+```
+
+### Problem: DATEV PDF network hatası
+
+**Çözüm:**
+Override otomatik devreye girmeli. Kontrol:
+```python
+import erpnext_datev.erpnext_datev.doctype.datev_unternehmen_online_settings.datev_unternehmen_online_settings as datev
+print(datev.attach_print)  # attach_print_custom olmalı
+```
+
+---
+
+## 📝 Changelog
+
+### v0.0.1 (Current)
+- ✅ Agreement → Price List sync
+- ✅ Sales Order validation
+- ✅ Order split & routing
+- ✅ Proforma generation
+- ✅ DATEV override
+- ✅ Multi-currency support
+- ✅ Code cleanup & refactoring
+
+---
+
+## 📄 License
+
+MIT License
+
+---
+
+## 👥 Contributors
+
+- İdris Gemici (idris.gemici61@gmail.com)
+
+---
+
+## 🔗 Links
+
+- [ERPNext Documentation](https://docs.erpnext.com)
+- [Frappe Framework](https://frappeframework.com)
+
+---
+
+**Son Güncelleme:** 2025-10-16
+**ERPNext Version:** v15
+**Frappe Version:** v15

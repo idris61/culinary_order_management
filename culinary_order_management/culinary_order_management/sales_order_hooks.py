@@ -181,81 +181,81 @@ def get_brand_company(brand_name):
     return None
 
 
+def _generate_po_number(parent_so, target_company):
+    """Parent SO'dan base PO numarasını çıkar ve company ile birleştir"""
+    base_po = None
+    if hasattr(parent_so, "woocommerce_id") and parent_so.woocommerce_id:
+        base_po = parent_so.woocommerce_id
+    elif hasattr(parent_so, "po_no") and parent_so.po_no:
+        base_po = parent_so.po_no
+    else:
+        # SO adından number kısmını çıkar (WEB1-027703 -> 027703 -> 27703)
+        match = re.search(r'-(\d+)$', parent_so.name)
+        if match:
+            base_po = match.group(1).lstrip('0') or match.group(1)
+    
+    company_abbr = _company_prefix(target_company)
+    return f"{base_po}-{company_abbr}"
+
+
+def _prepare_sales_order_base(parent_so, target_company):
+    """Yeni SO dokümanı oluştur ve temel bilgileri doldur"""
+    new_so = frappe.new_doc("Sales Order")
+    new_so.company = target_company
+    new_so.customer = parent_so.customer
+    new_so.transaction_date = parent_so.transaction_date
+    new_so.delivery_date = parent_so.delivery_date or parent_so.transaction_date
+    new_so.shipping_address_name = parent_so.shipping_address_name
+    new_so.customer_address = parent_so.customer_address
+    new_so.po_no = _generate_po_number(parent_so, target_company)
+    return new_so
+
+
+def _copy_items_to_sales_order(new_so, items):
+    """Item'ları yeni SO'ya kopyala"""
+    for item in items:
+        item_row = new_so.append("items")
+        item_row.item_code = item.item_code
+        item_row.item_name = item.item_name
+        item_row.qty = item.qty
+        item_row.rate = item.rate
+        item_row.amount = item.amount
+        item_row.description = item.description
+
+
+def _rename_sales_order_with_prefix(new_so, target_company):
+    """SO'yu şirket prefix'i ile yeniden adlandır"""
+    prefix = _company_prefix(target_company)
+    try:
+        target_name = make_autoname(f"{prefix}-.#####")
+        if target_name and target_name != new_so.name:
+            frappe.rename_doc("Sales Order", new_so.name, target_name, force=True)
+            new_so.name = target_name
+    except Exception:
+        pass  # Varsayılan isim kalabilir
+
+
 def create_company_sales_order(parent_so, items, target_company, order_type):
     """Hedef şirket için Sales Order oluştur"""
     try:
-        # Yeni Sales Order dokümanı oluştur
-        new_so = frappe.new_doc("Sales Order")
-        new_so.company = target_company
-        new_so.customer = parent_so.customer
-        new_so.transaction_date = parent_so.transaction_date
-        new_so.delivery_date = parent_so.delivery_date or parent_so.transaction_date
-        new_so.shipping_address_name = parent_so.shipping_address_name
-        new_so.customer_address = parent_so.customer_address
-        # Müşterinin Satınalma Siparişi (Customer PO) - Benzersiz olmalı
-        # Child SO'larda ana SO'nun PO numarasını company ile birleştir
-        import re
-        base_po = None
-        if hasattr(parent_so, "woocommerce_id") and parent_so.woocommerce_id:
-            # WooCommerce ID varsa direkt kullan
-            base_po = parent_so.woocommerce_id
-        elif hasattr(parent_so, "po_no") and parent_so.po_no:
-            # Ana SO'nun po_no'su varsa onu kullan
-            base_po = parent_so.po_no
-        else:
-            # SO adından number kısmını çıkar (WEB1-027703 -> 027703 -> 27703)
-            match = re.search(r'-(\d+)$', parent_so.name)
-            if match:
-                base_po = match.group(1).lstrip('0') or match.group(1)  # Leading zero kaldır
+        # SO oluştur ve temel bilgileri doldur
+        new_so = _prepare_sales_order_base(parent_so, target_company)
         
-        # Company kısaltmasıyla benzersiz PO oluştur
-        company_abbr = _company_prefix(target_company)
-        new_so.po_no = f"{base_po}-{company_abbr}"  # 27703-MBER
-
-        # Satırları kopyala
-        for item in items:
-            item_row = new_so.append("items")
-            item_row.item_code = item.item_code
-            item_row.item_name = item.item_name
-            item_row.qty = item.qty
-            item_row.rate = item.rate
-            item_row.amount = item.amount
-            item_row.description = item.description
-
-        # İsimlendirme: Hedef şirketin kısaltmasıyla başlayan şirket-bazlı seri
-        prefix = _company_prefix(target_company)
-        # ERPNext Sales Order isimlendirmesi naming_series'e bağlı olduğu için
-        # güvenilir yöntem: varsayılan isimle insert edip, sonrasında rename
-
-        # Kaydet ve submit et
+        # Item'ları kopyala
+        _copy_items_to_sales_order(new_so, items)
+        
+        # Kaydet
         new_so.insert(ignore_permissions=True)
-
-        # Insert sonrası, submit etmeden önce yeniden adlandır
-        try:
-            target_name = make_autoname(f"{prefix}-.#####")
-            if target_name and target_name != new_so.name:
-                frappe.rename_doc("Sales Order", new_so.name, target_name, force=True)
-                new_so.name = target_name
-        except Exception:
-            # Her durumda devam etsin; varsayılan isim kalabilir
-            pass
-        # Vergi/tutarlar insert sonrası da hesaplanır; submit öncesi güvence altına al
+        
+        # Yeniden adlandır
+        _rename_sales_order_with_prefix(new_so, target_company)
+        
+        # Vergi/tutarları hesapla ve submit et
         new_so.calculate_taxes_and_totals()
         new_so.submit()
-
-        # Referans bilgilerini kaydet
-        # Source Web SO: Ana SO'nun adını kaydet (WEB1-027703)
-        frappe.db.set_value(
-            "Sales Order",
-            new_so.name,
-            "source_web_so",
-            parent_so.name,  # WEB1-027703
-        )
-
-        frappe.log_error(
-            f"Hedef şirket SO oluşturuldu: {new_so.name} (şirket: {target_company}, tip: {order_type})",
-            "Order Split Success",
-        )
+        
+        # Referans bilgisini kaydet
+        frappe.db.set_value("Sales Order", new_so.name, "source_web_so", parent_so.name)
             
     except Exception as e:
         frappe.log_error(
