@@ -43,7 +43,9 @@ app_license = "mit"
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-doctype_js = {"Sales Order" : "public/js/sales_order.js"}
+doctype_js = {
+	"Agreement": "public/js/agreement.js",
+}
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -72,7 +74,7 @@ doctype_js = {"Sales Order" : "public/js/sales_order.js"}
 
 # Fixtures
 # ----------
-fixtures = ["custom_field.json", "proforma_invoice.json"]
+fixtures = ["custom_field.json"]
 
 # Jinja
 # ----------
@@ -136,10 +138,24 @@ permission_query_conditions = {}
 # Hook on document methods and events
 
 doc_events = {
-    "Sales Order": {
-        "after_submit": "culinary_order_management.culinary_order_management.sales_order_hooks.split_order_to_companies"
-    }
+	"Sales Order": {
+		"validate": "culinary_order_management.culinary_order_management.sales_order.validate_sales_order",
+		"after_submit": "culinary_order_management.culinary_order_management.sales_order_hooks.split_order_to_companies",
+	},
+	"Agreement": {
+		"after_insert": [
+			"culinary_order_management.culinary_order_management.agreement.create_price_list_for_agreement",
+		],
+		"on_update": [
+			"culinary_order_management.culinary_order_management.agreement.create_price_list_for_agreement",
+		],
+		"on_trash": [
+			"culinary_order_management.culinary_order_management.agreement.cleanup_item_prices",
+		],
+	},
 }
+
+# NOT: DATEV PDF override monkey patch ile yapılıyor (__init__.py)
 
 # Item hooks removed - supplier_display field was unused
 
