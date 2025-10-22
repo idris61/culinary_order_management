@@ -107,12 +107,10 @@ def validate_sales_order(doc, method=None):
 
 	for item in doc.items:
 		info = _get_item_price_from_agreements(doc.customer, item.item_code, posting_date)
+		
+		# Agreement yoksa standart fiyatlandırma kullanılsın
 		if not info:
-			frappe.throw(
-				_(
-					"Item {0} is not allowed for this Customer per Agreements or no valid price."
-				).format(item.item_code)
-			)
+			continue
 
 		# Geçerlilik tarihi kontrolü
 		valid_from = info.get("valid_from")
