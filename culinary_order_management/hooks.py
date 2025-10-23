@@ -141,7 +141,7 @@ permission_query_conditions = {}
 doc_events = {
 	"Sales Order": {
 		"validate": "culinary_order_management.culinary_order_management.sales_order.validate_sales_order",
-		"after_submit": "culinary_order_management.culinary_order_management.sales_order_hooks.split_order_to_companies",
+		# "after_submit": "culinary_order_management.culinary_order_management.sales_order_hooks.split_order_to_companies",  # Otomatik bölme devre dışı - sadece manuel buton ile
 	},
 	"Agreement": {
 		"after_insert": [

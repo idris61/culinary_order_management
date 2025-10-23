@@ -19,24 +19,69 @@ def split_order_to_companies(doc, method):
         return
     
     try:
+        # Debug: Başlangıç bilgisi
+        frappe.log_error(f"Split Order başlıyor - SO: {doc.name}, Items: {len(doc.items)}", "Split Order Debug")
+        
         # Teslimat adresi (varsa)
         customer_address = get_customer_delivery_address(doc.customer, doc.shipping_address_name)
         
         # Ürünleri gruplandır (mutfak/marka)
         kitchen_items, brand_items = group_items_by_type(doc.items)
         
+        # Debug: Gruplama sonucu
+        print(f"🔵 Gruplama - Mutfak: {len(kitchen_items)}, Marka: {len(brand_items)}")
+        frappe.log_error(f"🔵 Gruplama - Mutfak: {len(kitchen_items)}, Marka: {len(brand_items)}", "Split Order Debug")
+        
+        # Debug: Item detayları
+        for i, item in enumerate(doc.items):
+            is_kitchen = is_kitchen_item(item.item_code)
+            brand = get_item_brand(item.item_code)
+            print(f"🔵 Item {i+1}: {item.item_code} - Kitchen: {is_kitchen}, Brand: {brand}")
+            frappe.log_error(f"🔵 Item {i+1}: {item.item_code} - Kitchen: {is_kitchen}, Brand: {brand}", "Split Order Debug")
+        
         # Mutfak siparişlerini oluştur
         if kitchen_items:
+            print(f"🟢 Mutfak items var: {len(kitchen_items)}")
+            frappe.log_error(f"🟢 Mutfak items var: {len(kitchen_items)}", "Split Order Debug")
+            
             customer_pin = getattr(customer_address, "pincode", None)
+            print(f"🔵 Customer PIN: {customer_pin}")
+            frappe.log_error(f"🔵 Customer PIN: {customer_pin}", "Split Order Debug")
+            
             kitchen_company = find_nearest_kitchen(customer_pin, doc.customer)
+            print(f"🔵 Kitchen Company: {kitchen_company}")
+            frappe.log_error(f"🔵 Kitchen Company: {kitchen_company}", "Split Order Debug")
+            
             if kitchen_company and not child_order_exists(doc, kitchen_company):
+                print(f"🟢 Creating Kitchen SO for: {kitchen_company}")
+                frappe.log_error(f"🟢 Creating Kitchen SO for: {kitchen_company}", "Split Order Debug")
                 create_company_sales_order(doc, kitchen_items, kitchen_company, "kitchen")
+            else:
+                print(f"❌ Kitchen SO not created - Company: {kitchen_company}, Exists: {child_order_exists(doc, kitchen_company) if kitchen_company else 'N/A'}")
+                frappe.log_error(f"❌ Kitchen SO not created - Company: {kitchen_company}, Exists: {child_order_exists(doc, kitchen_company) if kitchen_company else 'N/A'}", "Split Order Debug")
+        else:
+            print(f"❌ No kitchen items found")
+            frappe.log_error(f"❌ No kitchen items found", "Split Order Debug")
         
         # Marka siparişlerini oluştur
+        print(f"🔵 Processing {len(brand_items)} brand groups")
+        frappe.log_error(f"🔵 Processing {len(brand_items)} brand groups", "Split Order Debug")
+        
         for brand_name, items in brand_items.items():
+            print(f"🔵 Processing brand: {brand_name} with {len(items)} items")
+            frappe.log_error(f"🔵 Processing brand: {brand_name} with {len(items)} items", "Split Order Debug")
+            
             brand_company = get_brand_company(brand_name)
+            print(f"🔵 Brand Company for {brand_name}: {brand_company}")
+            frappe.log_error(f"🔵 Brand Company for {brand_name}: {brand_company}", "Split Order Debug")
+            
             if brand_company and not child_order_exists(doc, brand_company):
+                print(f"🟢 Creating Brand SO for: {brand_company}")
+                frappe.log_error(f"🟢 Creating Brand SO for: {brand_company}", "Split Order Debug")
                 create_company_sales_order(doc, items, brand_company, brand_name)
+            else:
+                print(f"❌ Brand SO not created for {brand_name} - Company: {brand_company}, Exists: {child_order_exists(doc, brand_company) if brand_company else 'N/A'}")
+                frappe.log_error(f"❌ Brand SO not created for {brand_name} - Company: {brand_company}, Exists: {child_order_exists(doc, brand_company) if brand_company else 'N/A'}", "Split Order Debug")
         
         # Proforma oluştur
         try:
@@ -54,11 +99,41 @@ def split_order_to_companies_api(name: str):
     """Sales Order formundaki butondan manuel tetikleme.
     Doc submit edilmiş olmalı.
     """
-    doc = frappe.get_doc("Sales Order", name)
-    if doc.docstatus != 1:
-        frappe.throw("Sipariş onaylanmış olmalı (Submitted).")
-    split_order_to_companies(doc, "after_submit")
-    return {"ok": True}
+    try:
+        print(f"🔵 API Called - SO Name: {name}")
+        frappe.log_error(f"🔵 API Called - SO Name: {name}", "Split Order API Debug")
+        
+        doc = frappe.get_doc("Sales Order", name)
+        print(f"🔵 SO Loaded - Status: {doc.docstatus}, Company: {doc.company}, Items: {len(doc.items)}")
+        frappe.log_error(f"🔵 SO Loaded - Status: {doc.docstatus}, Company: {doc.company}, Items: {len(doc.items)}", "Split Order API Debug")
+        
+        if doc.docstatus != 1:
+            error_msg = "Sipariş onaylanmış olmalı (Submitted)."
+            print(f"❌ Error: {error_msg}")
+            frappe.log_error(f"❌ Error: {error_msg}", "Split Order API Debug")
+            return {"ok": False, "error": error_msg}
+        
+        if doc.company != "Culinary":
+            error_msg = "Sadece Culinary şirketi siparişleri bölünebilir."
+            print(f"❌ Error: {error_msg}")
+            frappe.log_error(f"❌ Error: {error_msg}", "Split Order API Debug")
+            return {"ok": False, "error": error_msg}
+        
+        print(f"🟢 Starting split_order_to_companies for: {name}")
+        frappe.log_error(f"🟢 Starting split_order_to_companies for: {name}", "Split Order API Debug")
+        
+        split_order_to_companies(doc, "after_submit")
+        
+        print(f"✅ Split Order Completed for: {name}")
+        frappe.log_error(f"✅ Split Order Completed for: {name}", "Split Order API Debug")
+        
+        return {"ok": True, "message": "Sipariş başarıyla ayrıştırıldı."}
+        
+    except Exception as e:
+        error_msg = f"API Exception: {str(e)}"
+        print(f"💥 {error_msg}")
+        frappe.log_error(f"💥 {error_msg}", "Split Order API Debug")
+        return {"ok": False, "error": str(e)}
 
 
 def get_customer_delivery_address(customer, shipping_address_name):
@@ -238,30 +313,44 @@ def _rename_sales_order_with_prefix(new_so, target_company):
 def create_company_sales_order(parent_so, items, target_company, order_type):
     """Hedef şirket için Sales Order oluştur"""
     try:
+        print(f"🟢 Creating Company SO - Target: {target_company}, Items: {len(items)}, Type: {order_type}")
+        frappe.log_error(f"🟢 Creating Company SO - Target: {target_company}, Items: {len(items)}, Type: {order_type}", "Split Order Debug")
+        
         # SO oluştur ve temel bilgileri doldur
         new_so = _prepare_sales_order_base(parent_so, target_company)
+        print(f"🔵 SO Base prepared: {new_so.name}")
+        frappe.log_error(f"🔵 SO Base prepared: {new_so.name}", "Split Order Debug")
         
         # Item'ları kopyala
         _copy_items_to_sales_order(new_so, items)
+        print(f"🔵 Items copied: {len(new_so.items)}")
+        frappe.log_error(f"🔵 Items copied: {len(new_so.items)}", "Split Order Debug")
         
         # Kaydet
         new_so.insert(ignore_permissions=True)
+        print(f"🔵 SO Inserted: {new_so.name}")
+        frappe.log_error(f"🔵 SO Inserted: {new_so.name}", "Split Order Debug")
         
         # Yeniden adlandır
         _rename_sales_order_with_prefix(new_so, target_company)
+        print(f"🔵 SO Renamed: {new_so.name}")
+        frappe.log_error(f"🔵 SO Renamed: {new_so.name}", "Split Order Debug")
         
         # Vergi/tutarları hesapla ve submit et
         new_so.calculate_taxes_and_totals()
         new_so.submit()
+        print(f"✅ SO Submitted: {new_so.name}")
+        frappe.log_error(f"✅ SO Submitted: {new_so.name}", "Split Order Debug")
         
         # Referans bilgisini kaydet
         frappe.db.set_value("Sales Order", new_so.name, "source_web_so", parent_so.name)
+        print(f"🔵 Reference saved: {new_so.name} -> {parent_so.name}")
+        frappe.log_error(f"🔵 Reference saved: {new_so.name} -> {parent_so.name}", "Split Order Debug")
             
     except Exception as e:
-        frappe.log_error(
-            f"Hedef şirket SO oluşturamadı - şirket: {target_company}, hata: {str(e)}",
-            "Company SO Creation Error"
-        )
+        error_msg = f"Hedef şirket SO oluşturamadı - şirket: {target_company}, hata: {str(e)}"
+        print(f"💥 {error_msg}")
+        frappe.log_error(error_msg, "Company SO Creation Error")
         raise
 
 
