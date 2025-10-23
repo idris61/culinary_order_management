@@ -247,25 +247,20 @@ def get_brand_company(supplier_name):
         print(f"🔵 Getting company for supplier: {supplier_name}")
         frappe.log_error(f"🔵 Getting company for supplier: {supplier_name}", "Split Order Debug")
         
-        # 1) Supplier'ın kendi company'si (Supplier doctype'ında company field'ı varsa)
-        supplier_company = frappe.db.get_value("Supplier", supplier_name, "company")
-        if supplier_company:
-            print(f"🟢 Supplier company found: {supplier_company}")
-            frappe.log_error(f"🟢 Supplier company found: {supplier_company}", "Split Order Debug")
-            return supplier_company
-        
-        # 2) Supplier adı ile eşleşen Company var mı?
+        # 1) Supplier adı ile eşleşen Company var mı?
         if frappe.db.exists("Company", supplier_name):
             print(f"🟢 Company exists with supplier name: {supplier_name}")
             frappe.log_error(f"🟢 Company exists with supplier name: {supplier_name}", "Split Order Debug")
             return supplier_name
         
-        # 3) Supplier adını Company adıyla eşleştir (ör: "Edel Weiss" -> "Edel Weiss Company")
+        # 2) Supplier adını Company adıyla eşleştir (ör: "Edel Weiss" -> "Edel Weiss Company")
         company_variations = [
             supplier_name,
             f"{supplier_name} Company",
             f"{supplier_name} GmbH",
-            f"{supplier_name} AG"
+            f"{supplier_name} AG",
+            f"{supplier_name} Ltd",
+            f"{supplier_name} Limited"
         ]
         
         for variation in company_variations:
