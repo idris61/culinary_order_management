@@ -13,7 +13,7 @@
       ],
       [
         "source_sales_order",
-        ""
+        "supplier_company"
       ],
       [
         "invoice_date",
@@ -40,6 +40,13 @@
         "fieldtype": "Link",
         "label": "Source Sales Order",
         "options": "Sales Order",
+        "read_only": 1
+      },
+      {
+        "fieldname": "supplier_company",
+        "fieldtype": "Link",
+        "label": "Supplier Company",
+        "options": "Company",
         "read_only": 1
       },
       {

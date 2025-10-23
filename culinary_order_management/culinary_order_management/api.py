@@ -132,3 +132,8 @@ def items_by_customer_agreement(
 
 
 
+
+
+
+
+
