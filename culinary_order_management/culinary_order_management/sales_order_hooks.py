@@ -25,19 +25,19 @@ def split_order_to_companies(doc, method):
         # Teslimat adresi (varsa)
         customer_address = get_customer_delivery_address(doc.customer, doc.shipping_address_name)
         
-        # Ürünleri gruplandır (mutfak/marka)
-        kitchen_items, brand_items = group_items_by_type(doc.items)
+        # Ürünleri gruplandır (mutfak/supplier)
+        kitchen_items, supplier_items = group_items_by_type(doc.items)
         
         # Debug: Gruplama sonucu
-        print(f"🔵 Gruplama - Mutfak: {len(kitchen_items)}, Marka: {len(brand_items)}")
-        frappe.log_error(f"🔵 Gruplama - Mutfak: {len(kitchen_items)}, Marka: {len(brand_items)}", "Split Order Debug")
+        print(f"🔵 Gruplama - Mutfak: {len(kitchen_items)}, Supplier: {len(supplier_items)}")
+        frappe.log_error(f"🔵 Gruplama - Mutfak: {len(kitchen_items)}, Supplier: {len(supplier_items)}", "Split Order Debug")
         
         # Debug: Item detayları
         for i, item in enumerate(doc.items):
             is_kitchen = is_kitchen_item(item.item_code)
-            brand = get_item_brand(item.item_code)
-            print(f"🔵 Item {i+1}: {item.item_code} - Kitchen: {is_kitchen}, Brand: {brand}")
-            frappe.log_error(f"🔵 Item {i+1}: {item.item_code} - Kitchen: {is_kitchen}, Brand: {brand}", "Split Order Debug")
+            supplier = get_item_brand(item.item_code)  # Artık supplier döndürüyor
+            print(f"🔵 Item {i+1}: {item.item_code} - Kitchen: {is_kitchen}, Supplier: {supplier}")
+            frappe.log_error(f"🔵 Item {i+1}: {item.item_code} - Kitchen: {is_kitchen}, Supplier: {supplier}", "Split Order Debug")
         
         # Mutfak siparişlerini oluştur
         if kitchen_items:
@@ -63,25 +63,25 @@ def split_order_to_companies(doc, method):
             print(f"❌ No kitchen items found")
             frappe.log_error(f"❌ No kitchen items found", "Split Order Debug")
         
-        # Marka siparişlerini oluştur
-        print(f"🔵 Processing {len(brand_items)} brand groups")
-        frappe.log_error(f"🔵 Processing {len(brand_items)} brand groups", "Split Order Debug")
+        # Supplier siparişlerini oluştur
+        print(f"🔵 Processing {len(supplier_items)} supplier groups")
+        frappe.log_error(f"🔵 Processing {len(supplier_items)} supplier groups", "Split Order Debug")
         
-        for brand_name, items in brand_items.items():
-            print(f"🔵 Processing brand: {brand_name} with {len(items)} items")
-            frappe.log_error(f"🔵 Processing brand: {brand_name} with {len(items)} items", "Split Order Debug")
+        for supplier_name, items in supplier_items.items():
+            print(f"🔵 Processing supplier: {supplier_name} with {len(items)} items")
+            frappe.log_error(f"🔵 Processing supplier: {supplier_name} with {len(items)} items", "Split Order Debug")
             
-            brand_company = get_brand_company(brand_name)
-            print(f"🔵 Brand Company for {brand_name}: {brand_company}")
-            frappe.log_error(f"🔵 Brand Company for {brand_name}: {brand_company}", "Split Order Debug")
+            supplier_company = get_brand_company(supplier_name)
+            print(f"🔵 Supplier Company for {supplier_name}: {supplier_company}")
+            frappe.log_error(f"🔵 Supplier Company for {supplier_name}: {supplier_company}", "Split Order Debug")
             
-            if brand_company and not child_order_exists(doc, brand_company):
-                print(f"🟢 Creating Brand SO for: {brand_company}")
-                frappe.log_error(f"🟢 Creating Brand SO for: {brand_company}", "Split Order Debug")
-                create_company_sales_order(doc, items, brand_company, brand_name)
+            if supplier_company and not child_order_exists(doc, supplier_company):
+                print(f"🟢 Creating Supplier SO for: {supplier_company}")
+                frappe.log_error(f"🟢 Creating Supplier SO for: {supplier_company}", "Split Order Debug")
+                create_company_sales_order(doc, items, supplier_company, supplier_name)
             else:
-                print(f"❌ Brand SO not created for {brand_name} - Company: {brand_company}, Exists: {child_order_exists(doc, brand_company) if brand_company else 'N/A'}")
-                frappe.log_error(f"❌ Brand SO not created for {brand_name} - Company: {brand_company}, Exists: {child_order_exists(doc, brand_company) if brand_company else 'N/A'}", "Split Order Debug")
+                print(f"❌ Supplier SO not created for {supplier_name} - Company: {supplier_company}, Exists: {child_order_exists(doc, supplier_company) if supplier_company else 'N/A'}")
+                frappe.log_error(f"❌ Supplier SO not created for {supplier_name} - Company: {supplier_company}, Exists: {child_order_exists(doc, supplier_company) if supplier_company else 'N/A'}", "Split Order Debug")
         
         # Proforma oluştur
         try:
@@ -152,22 +152,22 @@ def get_customer_delivery_address(customer, shipping_address_name):
 
 
 def group_items_by_type(items):
-    """Ürünleri mutfak/marka gruplarına ayır"""
+    """Ürünleri mutfak/supplier gruplarına ayır"""
     kitchen_items = []
-    brand_items = {}
+    supplier_items = {}
     
     for item in items:
         if is_kitchen_item(item.item_code):
             kitchen_items.append(item)
         else:
-            # Marka bilgisini al
-            brand = get_item_brand(item.item_code)
-            if brand:
-                if brand not in brand_items:
-                    brand_items[brand] = []
-                brand_items[brand].append(item)
+            # Supplier bilgisini al
+            supplier = get_item_brand(item.item_code)  # Artık supplier döndürüyor
+            if supplier:
+                if supplier not in supplier_items:
+                    supplier_items[supplier] = []
+                supplier_items[supplier].append(item)
     
-    return kitchen_items, brand_items
+    return kitchen_items, supplier_items
 
 
 def is_kitchen_item(item_code):
@@ -177,9 +177,29 @@ def is_kitchen_item(item_code):
 
 
 def get_item_brand(item_code):
-    """Ürünün markasını getir"""
-    brand = frappe.db.get_value("Item", item_code, "brand")
-    return brand
+    """Ürünün markasını Supplier Items tablosundan getir"""
+    try:
+        # Supplier Items tablosundan supplier bilgisini al
+        supplier_items = frappe.get_all("Item Supplier", 
+            filters={"parent": item_code},
+            fields=["supplier"],
+            limit=1
+        )
+        
+        if supplier_items:
+            supplier = supplier_items[0].supplier
+            print(f"🔵 Item {item_code} supplier: {supplier}")
+            frappe.log_error(f"🔵 Item {item_code} supplier: {supplier}", "Split Order Debug")
+            return supplier
+        
+        print(f"❌ No supplier found for item: {item_code}")
+        frappe.log_error(f"❌ No supplier found for item: {item_code}", "Split Order Debug")
+        return None
+        
+    except Exception as e:
+        print(f"💥 Error getting supplier for item {item_code}: {str(e)}")
+        frappe.log_error(f"💥 Error getting supplier for item {item_code}: {str(e)}", "Split Order Debug")
+        return None
 
 
 def find_nearest_kitchen(customer_pincode, customer_name):
@@ -221,39 +241,47 @@ def find_nearest_kitchen(customer_pincode, customer_name):
     return None
 
 
-def get_brand_company(brand_name):
-    """Marka için varsayılan şirketi getir"""
+def get_brand_company(supplier_name):
+    """Supplier için varsayılan şirketi getir"""
     try:
-        # 1) Opsiyonel: Brand Default (varsa)
-        brand_defaults = frappe.get_all(
-            "Brand Default",
-            filters={"brand": brand_name},
-            fields=["company"],
-            limit=1,
-        )
-        if brand_defaults:
-            return brand_defaults[0].company
-    except Exception:
-        # DocType yoksa sessizce geç
-        pass
-
-    try:
-        # 2) Brand doc üzerindeki olası default_company alanı (varsa)
-        default_company = frappe.db.get_value("Brand", brand_name, "default_company")
-        if default_company:
-            return default_company
-    except Exception:
-        pass
-
-    # 3) Alan/doctype yoksa, marka adıyla aynı isimde bir Company var mı?
-    try:
-        if frappe.db.exists("Company", brand_name):
-            return brand_name
-    except Exception:
-        pass
-
-    # 4) Eşleşme bulunamadı; marka yönlendirmesini atla
-    return None
+        print(f"🔵 Getting company for supplier: {supplier_name}")
+        frappe.log_error(f"🔵 Getting company for supplier: {supplier_name}", "Split Order Debug")
+        
+        # 1) Supplier'ın kendi company'si (Supplier doctype'ında company field'ı varsa)
+        supplier_company = frappe.db.get_value("Supplier", supplier_name, "company")
+        if supplier_company:
+            print(f"🟢 Supplier company found: {supplier_company}")
+            frappe.log_error(f"🟢 Supplier company found: {supplier_company}", "Split Order Debug")
+            return supplier_company
+        
+        # 2) Supplier adı ile eşleşen Company var mı?
+        if frappe.db.exists("Company", supplier_name):
+            print(f"🟢 Company exists with supplier name: {supplier_name}")
+            frappe.log_error(f"🟢 Company exists with supplier name: {supplier_name}", "Split Order Debug")
+            return supplier_name
+        
+        # 3) Supplier adını Company adıyla eşleştir (ör: "Edel Weiss" -> "Edel Weiss Company")
+        company_variations = [
+            supplier_name,
+            f"{supplier_name} Company",
+            f"{supplier_name} GmbH",
+            f"{supplier_name} AG"
+        ]
+        
+        for variation in company_variations:
+            if frappe.db.exists("Company", variation):
+                print(f"🟢 Company found with variation: {variation}")
+                frappe.log_error(f"🟢 Company found with variation: {variation}", "Split Order Debug")
+                return variation
+        
+        print(f"❌ No company found for supplier: {supplier_name}")
+        frappe.log_error(f"❌ No company found for supplier: {supplier_name}", "Split Order Debug")
+        return None
+        
+    except Exception as e:
+        print(f"💥 Error getting company for supplier {supplier_name}: {str(e)}")
+        frappe.log_error(f"💥 Error getting company for supplier {supplier_name}: {str(e)}", "Split Order Debug")
+        return None
 
 
 def _generate_po_number(parent_so, target_company):
