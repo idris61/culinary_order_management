@@ -95,5 +95,3 @@ function apply_agreement_discount(frm) {
     });
     frm.refresh_field('agreement_items');
 }
-
-

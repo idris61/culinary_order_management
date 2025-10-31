@@ -1,27 +1,174 @@
 {
-  "doctype": "DocType",
-  "name": "Agreement",
-  "module": "Culinary Order Management",
-  "istable": 0,
-  "custom": 0,
-  "editable_grid": 0,
-  "autoname": "format:{customer} - {supplier}",
-  "fields": [
-    {"fieldname": "customer", "label": "Customer", "fieldtype": "Link", "options": "Customer", "reqd": 1, "in_list_view": 1},
-    {"fieldname": "supplier", "label": "Supplier", "fieldtype": "Link", "options": "Supplier", "reqd": 1, "in_list_view": 1},
-    {"fieldname": "valid_from", "label": "Valid From", "fieldtype": "Date", "in_list_view": 1},
-    {"fieldname": "valid_to", "label": "Valid To", "fieldtype": "Date", "in_list_view": 1},
-    {"fieldname": "is_active", "label": "Is Active", "fieldtype": "Check", "default": "1"},
-    {"fieldname": "discount_rate", "label": "Discount Rate", "fieldtype": "Percent", "default": "0", "precision": "1", "description": "Discount percentage over the standard selling price (%)"},
-    {"fieldname": "price_list", "label": "Price List", "fieldtype": "Link", "options": "Price List", "read_only": 1},
-    {"fieldname": "agreement_items", "label": "Agreement Items", "fieldtype": "Table", "options": "Agreement Item"}
-  ],
-  "field_order": [
-    "customer", "supplier", "valid_from", "valid_to", "is_active", "discount_rate", "price_list", "agreement_items"
-  ],
-  "permissions": [
-    {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "print": 1, "email": 1, "share": 1}
-  ]
+ "actions": [],
+ "autoname": "format:{customer} - {supplier}",
+ "creation": "2025-10-15 10:02:35.199602",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "customer",
+  "supplier",
+  "status",
+  "column_break_basic",
+  "amended_from",
+  "section_validity",
+  "valid_from",
+  "valid_to",
+  "column_break_validity",
+  "discount_rate",
+  "section_pricing",
+  "price_list",
+  "section_items",
+  "agreement_items"
+ ],
+ "fields": [
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Customer",
+   "options": "Customer",
+   "reqd": 1
+  },
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Supplier",
+   "options": "Supplier",
+   "reqd": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Not Started\nActive\nExpired\nCancelled",
+   "read_only": 1,
+   "default": "Not Started"
+  },
+  {
+   "fieldname": "column_break_basic",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Agreement",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "collapsible": 0,
+   "fieldname": "section_validity",
+   "fieldtype": "Section Break",
+   "label": "Validity Period"
+  },
+  {
+   "fieldname": "valid_from",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Valid From",
+   "reqd": 1
+  },
+  {
+   "fieldname": "valid_to",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Valid To",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_validity",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "Discount percentage over the standard selling price (%)",
+   "fieldname": "discount_rate",
+   "fieldtype": "Percent",
+   "label": "Discount Rate",
+   "precision": "2"
+  },
+  {
+   "collapsible": 0,
+   "fieldname": "section_pricing",
+   "fieldtype": "Section Break",
+   "label": "Pricing Information"
+  },
+  {
+   "fieldname": "price_list",
+   "fieldtype": "Link",
+   "label": "Price List",
+   "options": "Price List",
+   "read_only": 1
+  },
+  {
+   "collapsible": 0,
+   "fieldname": "section_items",
+   "fieldtype": "Section Break",
+   "label": "Agreement Items"
+  },
+  {
+   "fieldname": "agreement_items",
+   "fieldtype": "Table",
+   "label": "Items",
+   "options": "Agreement Item",
+   "reqd": 1
+  }
+ ],
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2025-10-30 22:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Culinary Order Management",
+ "name": "Agreement",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager",
+   "share": 1,
+   "write": 1,
+   "submit": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales User",
+   "share": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "track_seen": 1
 }
-
-

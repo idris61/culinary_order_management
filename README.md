@@ -34,6 +34,9 @@ Bu uygulama, ERPNext üzerinde çoklu şirket yapısında çalışan bir sipari�
 - ✅ Tarih aralıklı geçerlilik
 - ✅ Otomatik Price List senkronizasyonu
 - ✅ Çakışan fiyat temizleme
+- ✅ **Dinamik status yönetimi** (Taslak/Aktif/Günü Geçmiş/İptal Edildi)
+- ✅ **Otomatik expired agreement iptali**
+- ✅ **Süresi dolan anlaşma fiyatlarının otomatik temizliği**
 
 ### 2. Sales Order Validation (Sipariş Doğrulama)
 - ✅ Anlaşma kontrolü (sadece anlaşmalı ürünler)
@@ -85,7 +88,9 @@ Culinary Order Management
 │   └── setup.py               # Installation hooks
 │
 ├── Frontend (JavaScript)
-│   └── agreement.js           # Agreement form logic
+│   ├── agreement.js           # Agreement form logic
+│   ├── agreement_list.js      # List view indicators (status colors)
+│   └── sales_order.js         # Sales Order form logic
 │
 ├── Custom Fields (2)
 │   ├── Item.is_kitchen_item   # Mutfak ürünü flag
@@ -93,7 +98,8 @@ Culinary Order Management
 │
 └── Hooks
     ├── doc_events             # Document lifecycle hooks
-    └── doctype_js             # Client script injection
+    ├── doctype_js             # Client script injection
+    └── scheduler_events       # Daily tasks (agreement status updates)
 ```
 
 ---
@@ -102,7 +108,7 @@ Culinary Order Management
 
 ### 1. Agreement Module (agreement.py)
 
-**Amaç:** Müşteri-Tedarikçi anlaşmalarını ERPNext Price List'e senkronize etmek.
+**Amaç:** Müşteri-Tedarikçi anlaşmalarını ERPNext Price List'e senkronize etmek ve yaşam döngüsünü otomatik yönetmek.
 
 **Ana Fonksiyonlar:**
 
@@ -120,8 +126,24 @@ sync_item_prices(doc, method)
 # - Overlap temizleme yapar
 
 cleanup_item_prices(doc, method)
-# Agreement silindiğinde:
+# Agreement silindiğinde/iptal edildiğinde:
 # - İlgili Price List'ten ürünleri kaldırır
+
+update_status(self)
+# Agreement status'ünü tarih bazlı hesaplar:
+# - docstatus=0 → "Not Started" (Taslak)
+# - docstatus=2 → "Cancelled" or "Expired"
+# - docstatus=1:
+#   - bugün < valid_from → "Not Started"
+#   - bugün > valid_to → "Expired"
+#   - else → "Active"
+
+update_all_agreement_statuses()
+# Günlük scheduler ile çalışır:
+# 1. Tüm agreement'ların status'ünü günceller
+# 2. Expired olanları otomatik cancel eder (docstatus=2)
+# 3. on_cancel hook ile fiyatları temizler
+# 4. Status'ü "Expired" olarak korur (görsel ayrım için)
 ```
 
 **Veri Akışı:**
@@ -133,11 +155,24 @@ Agreement → Price List → Item Price
     Sales Order
 ```
 
+**Agreement Yaşam Döngüsü:**
+```
+Taslak (Draft)
+    ↓ Submit
+Aktif (Active)
+    ↓ Tarihi geçince (Otomatik)
+Günü Geçmiş (Expired) → Cancel edilir → Fiyatlar temizlenir
+```
+
 **Key Features:**
 - ✅ Natural unique key: (Price List, Item, Currency, Valid From, Valid To)
 - ✅ NULL date handling (open-ended ranges)
 - ✅ Automatic overlap cleanup
 - ✅ Multi-currency per item
+- ✅ **Dynamic status based on dates**
+- ✅ **Automatic cancellation of expired agreements**
+- ✅ **Scheduled daily status updates**
+- ✅ **Visual distinction: "Expired" vs "Cancelled"**
 
 ---
 
@@ -611,7 +646,16 @@ print(datev.attach_print)  # attach_print_custom olmalı
 
 ## 📝 Changelog
 
-### v0.0.1 (Current)
+### v0.0.2 (2025-10-31)
+- ✅ **Agreement Status Sistemi**
+  - Dinamik status hesaplama (Taslak/Aktif/Günü Geçmiş/İptal Edildi)
+  - Renkli liste görünümü indicators
+  - Otomatik expired agreement iptali
+  - Günlük scheduler ile status güncelleme
+  - Expired fiyatların otomatik temizlenmesi
+- ✅ Code cleanup & optimization
+
+### v0.0.1
 - ✅ Agreement → Price List sync
 - ✅ Sales Order validation
 - ✅ Order split & routing
@@ -641,6 +685,6 @@ MIT License
 
 ---
 
-**Son Güncelleme:** 2025-10-16
+**Son Güncelleme:** 2025-10-31
 **ERPNext Version:** v15
 **Frappe Version:** v15
