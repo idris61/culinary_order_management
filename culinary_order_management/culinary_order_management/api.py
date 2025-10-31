@@ -2,6 +2,8 @@ import json
 from typing import Any, Dict, List, Optional, Tuple
 
 import frappe
+from frappe import _
+from frappe.permissions import has_permission
 
 
 def _parse_filters(raw_filters: Any) -> Dict[str, Any]:
@@ -23,10 +25,17 @@ def item_by_supplier(
 	page_len: int = 20,
 	filters: Optional[Any] = None,
 ) -> List[Tuple[str, str]]:
-	"""
-	Tedarikçiye bağlı ürünleri döndürür. `tabItem Supplier` üzerinden eşleşme yapılır.
+	"""Tedarikçiye bağlı ürünleri döndürür.
+	
+	`tabItem Supplier` üzerinden eşleşme yapılır.
 	Arama, item `name` ve `item_name` alanlarında yapılır.
+	
+	Requires: Item read permission
 	"""
+	# Permission check
+	if not has_permission("Item", "read"):
+		frappe.throw(_("You don't have permission to read Item"), frappe.PermissionError)
+	
 	flt = _parse_filters(filters)
 	supplier = flt.get("supplier") or flt.get("default_supplier")
 
@@ -64,8 +73,9 @@ def item_query_by_supplier(
 	page_len: int = 20,
 	filters: Optional[Any] = None,
 ):
-	"""
-	Link alanı sorguları için tedarikçiye göre ürün sorgusu proxy'si.
+	"""Link alanı sorguları için tedarikçiye göre ürün sorgusu proxy'si.
+	
+	Permission check item_by_supplier() içinde yapılır.
 	"""
 	return item_by_supplier(doctype, txt, searchfield, start, page_len, filters)
 
@@ -79,10 +89,16 @@ def items_by_customer_agreement(
 	page_len: int = 20,
 	filters: Optional[Any] = None,
 ):
-	"""
-	Müşterinin geçerli anlaşmalarına göre sipariş edebileceği ürünleri listeler.
+	"""Müşterinin geçerli anlaşmalarına göre sipariş edebileceği ürünleri listeler.
+	
 	Tarih kontrolü Agreement.valid_from/valid_to üzerinden yapılır.
+	
+	Requires: Agreement read permission
 	"""
+	# Permission check
+	if not has_permission("Agreement", "read"):
+		frappe.throw(_("You don't have permission to read Agreement"), frappe.PermissionError)
+	
 	flt = _parse_filters(filters)
 	customer = flt.get("customer")
 	posting_date = flt.get("posting_date") or frappe.utils.nowdate()
@@ -114,26 +130,3 @@ def items_by_customer_agreement(
 		query,
 		(customer, posting_date, posting_date, like_txt, like_txt, page_len, start),
 	)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

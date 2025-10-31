@@ -47,7 +47,9 @@ doctype_js = {
 	"Agreement": "public/js/agreement.js",
 	"Sales Order": "public/js/sales_order.js",
 }
-# doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
+doctype_list_js = {
+	"Agreement": "public/js/agreement_list.js"
+}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
 
@@ -144,13 +146,13 @@ doc_events = {
 		# "after_submit": "culinary_order_management.culinary_order_management.sales_order_hooks.split_order_to_companies",  # Otomatik bölme devre dışı - sadece manuel buton ile
 	},
 	"Agreement": {
-		"after_insert": [
+		"after_submit": [
 			"culinary_order_management.culinary_order_management.agreement.create_price_list_for_agreement",
 		],
-		"on_update": [
-			"culinary_order_management.culinary_order_management.agreement.create_price_list_for_agreement",
+		"on_update_after_submit": [
+			"culinary_order_management.culinary_order_management.agreement.sync_item_prices",
 		],
-		"on_trash": [
+		"on_cancel": [
 			"culinary_order_management.culinary_order_management.agreement.cleanup_item_prices",
 		],
 	},
@@ -163,23 +165,11 @@ doc_events = {
 # Scheduled Tasks
 # ---------------
 
-# scheduler_events = {
-# 	"all": [
-# 		"culinary_order_management.tasks.all"
-# 	],
-# 	"daily": [
-# 		"culinary_order_management.tasks.daily"
-# 	],
-# 	"hourly": [
-# 		"culinary_order_management.tasks.hourly"
-# 	],
-# 	"weekly": [
-# 		"culinary_order_management.tasks.weekly"
-# 	],
-# 	"monthly": [
-# 		"culinary_order_management.tasks.monthly"
-# 	],
-# }
+scheduler_events = {
+	"daily": [
+		"culinary_order_management.culinary_order_management.doctype.agreement.agreement.update_all_agreement_statuses"
+	],
+}
 
 # Testing
 # -------
