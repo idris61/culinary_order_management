@@ -77,7 +77,14 @@ doctype_list_js = {
 
 # Fixtures
 # ----------
-fixtures = ["custom_field.json"]
+fixtures = [
+	{
+		"dt": "Custom Field",
+		"filters": [
+			["name", "in", ["Item-supplier_display"]]
+		]
+	}
+]
 
 # Jinja
 # ----------
