@@ -145,17 +145,8 @@ doc_events = {
 		"validate": "culinary_order_management.culinary_order_management.sales_order.validate_sales_order",
 		# "after_submit": "culinary_order_management.culinary_order_management.sales_order_hooks.split_order_to_companies",  # Otomatik bölme devre dışı - sadece manuel buton ile
 	},
-	"Agreement": {
-		"after_submit": [
-			"culinary_order_management.culinary_order_management.agreement.create_price_list_for_agreement",
-		],
-		"on_update_after_submit": [
-			"culinary_order_management.culinary_order_management.agreement.sync_item_prices",
-		],
-		"on_cancel": [
-			"culinary_order_management.culinary_order_management.agreement.cleanup_item_prices",
-		],
-	},
+	# Agreement hooks - Artık Agreement class içinde direkt çağrılıyor (agreement.py)
+	# Fiyat yönetimi: on_submit → create_price_list, on_update_after_submit → sync_prices, on_cancel → cleanup_prices
 }
 
 # NOT: DATEV PDF override monkey patch ile yapılıyor (__init__.py)

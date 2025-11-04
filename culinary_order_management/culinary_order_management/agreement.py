@@ -321,13 +321,16 @@ def create_price_list_for_agreement(doc, method):
 		ValidationError: Price list creation failed or invalid data
 	"""
 	if not doc.customer:
+		error_msg = _("Customer field is empty, cannot create price list")
 		frappe.log_error(
-			message="Customer field is empty",
+			message=error_msg,
 			title="Agreement Price List - Missing Customer"
 		)
-		return
+		msgprint(f"❌ {error_msg}", indicator="red", alert=True)
+		frappe.throw(error_msg, ValidationError)
 		
 	try:
+		price_list_created = False
 		currencies_used = set()
 		for item in doc.agreement_items:
 			if item.currency:
@@ -357,13 +360,17 @@ def create_price_list_for_agreement(doc, method):
 					price_list.selling = 1
 					price_list.currency = currency
 					price_list.insert(ignore_permissions=True)
-					msgprint(_("Price List '{0}' created ({1})").format(price_list_name, currency), indicator="green")
+					price_list_created = True
+					msgprint(_("✅ Price List '{0}' created ({1})").format(price_list_name, currency), indicator="green")
 				else:
 					price_list = frappe.get_doc("Price List", price_list_name)
+					price_list_created = True
 					if not price_list.enabled:
 						price_list.enabled = 1
 						price_list.save(ignore_permissions=True)
-						msgprint(_("Price List '{0}' activated").format(price_list_name), indicator="green")
+						msgprint(_("✅ Price List '{0}' activated").format(price_list_name), indicator="green")
+					else:
+						msgprint(_("✅ Price List '{0}' already exists and is active").format(price_list_name), indicator="blue")
 						
 			except frappe.exceptions.DuplicateEntryError as e:
 				if frappe.db.exists("Price List", price_list_name):
@@ -381,12 +388,23 @@ def create_price_list_for_agreement(doc, method):
 			except ValidationError as e:
 				frappe.throw(_("Price List validation error: {0}").format(str(e)), ValidationError)
 
+		# Price List başarıyla oluşturuldu mu kontrol et
+		if not price_list_created:
+			error_msg = _("Failed to create or verify Price List for customer '{0}'").format(doc.customer)
+			frappe.log_error(
+				message=error_msg,
+				title="Agreement Price List - Creation Failed"
+			)
+			msgprint(f"❌ {error_msg}", indicator="red", alert=True)
+			frappe.throw(error_msg, ValidationError)
+		
 		try:
 			doc.price_list = f"{doc.customer}"
 			doc.db_set("price_list", doc.price_list, update_modified=False)
 		except Exception as e:
 			frappe.throw(_("Could not link Price List to Agreement: {0}").format(str(e)), ValidationError)
 		
+		# Price List var, şimdi fiyatları senkronize et
 		sync_item_prices(doc, method)
 	
 	except frappe.exceptions.LinkValidationError as e:
@@ -416,7 +434,19 @@ def sync_item_prices(doc, method):
 			message="Customer field is empty",
 			title="Agreement Item Price Sync - Missing Customer"
 		)
+		msgprint(_("❌ Customer field is missing, cannot sync prices"), indicator="red", alert=True)
 		return
+	
+	# Price List varlık kontrolü - MUTLAKA olmalı
+	price_list_name = f"{doc.customer}"
+	if not frappe.db.exists("Price List", price_list_name):
+		error_msg = _("Price List '{0}' not found! Please create price list first.").format(price_list_name)
+		frappe.log_error(
+			message=f"Price List '{price_list_name}' does not exist for agreement {doc.name}",
+			title="Agreement Item Price Sync - Critical: Price List Missing"
+		)
+		msgprint(f"❌ {error_msg}", indicator="red", alert=True)
+		frappe.throw(error_msg, ValidationError)
 		
 	try:
 		discount_rate = frappe.utils.flt(getattr(doc, "discount_rate", 0))
@@ -555,23 +585,28 @@ def sync_item_prices(doc, method):
 				)
 		
 		if processed_items > 0:
-			msg = _("{0} item prices updated").format(processed_items)
+			msg = _("✅ {0} item prices updated").format(processed_items)
 			if deleted_prices > 0:
 				msg += _(" ({0} old records cleaned)").format(deleted_prices)
-			msgprint(msg, indicator="green")
+			msgprint(msg, indicator="green", alert=True)
+		else:
+			# Hiç item işlenemediyse uyarı ver
+			if not failed_items:
+				msgprint(_("⚠️ No items to process in this agreement"), indicator="orange", alert=True)
 		
 		if failed_items:
-			error_summary = _("{0} items could not be processed:").format(len(failed_items)) + "\n"
+			error_summary = _("⚠️ {0} items could not be processed:").format(len(failed_items)) + "\n"
 			for item_code, reason in failed_items[:3]:
 				error_summary += f"  - {item_code}: {reason}\n"
 			
 			if len(failed_items) > 3:
 				error_summary += _("  ... and {0} more").format(len(failed_items) - 3) + "\n"
 			
-			msgprint(f"⚠️ {error_summary}", indicator="orange")
+			msgprint(error_summary, indicator="orange", alert=True)
 			
 			if processed_items == 0:
-				frappe.throw(_("No item prices could be synchronized:") + f"\n{error_summary}", ValidationError)
+				# Hiçbir fiyat oluşturulamadıysa MUTLAKA throw et
+				frappe.throw(_("❌ No item prices could be synchronized!") + f"\n{error_summary}", ValidationError)
 		
 	except frappe.exceptions.LinkValidationError as e:
 		_handle_agreement_error(e, "Item Price Sync", doc.name)
@@ -592,10 +627,12 @@ def cleanup_item_prices(doc, method):
 		ValidationError: Item Price cleanup failed
 	"""
 	if not doc.customer:
+		error_msg = _("Customer field is empty, cannot cleanup prices")
 		frappe.log_error(
-			message="Customer field is empty",
+			message=error_msg,
 			title="Agreement Item Price Cleanup - Missing Customer"
 		)
+		msgprint(f"⚠️ {error_msg}", indicator="orange", alert=True)
 		return
 
 	try:
@@ -604,10 +641,12 @@ def cleanup_item_prices(doc, method):
 		failed_items = []
 		
 		if not frappe.db.exists("Price List", price_list_name):
+			msg = _("Price List '{0}' not found, no prices to cleanup").format(price_list_name)
 			frappe.log_error(
-				message=f"Price List '{price_list_name}' not found, nothing to cleanup",
+				message=msg,
 				title="Agreement Item Price Cleanup - Price List Not Found"
 			)
+			msgprint(f"ℹ️ {msg}", indicator="blue", alert=True)
 			return
 		
 		for item in doc.agreement_items:
@@ -644,20 +683,24 @@ def cleanup_item_prices(doc, method):
 				)
 		
 		if total_removed > 0:
-			msgprint(_("{0} price records removed").format(total_removed), indicator="green")
+			msgprint(_("✅ {0} price records removed").format(total_removed), indicator="green", alert=True)
+		else:
+			# Hiç fiyat silinmediyse bilgi ver
+			if not failed_items:
+				msgprint(_("ℹ️ No price records found to remove for this agreement"), indicator="blue", alert=True)
 		
 		if failed_items:
-			error_summary = _("{0} items could not be cleaned:").format(len(failed_items)) + "\n"
+			error_summary = _("⚠️ {0} items could not be cleaned:").format(len(failed_items)) + "\n"
 			for item_code, reason in failed_items[:3]:
 				error_summary += f"  - {item_code}: {reason}\n"
 			
 			if len(failed_items) > 3:
 				error_summary += _("  ... and {0} more").format(len(failed_items) - 3) + "\n"
 			
-			msgprint(f"⚠️ {error_summary}", indicator="orange")
+			msgprint(error_summary, indicator="orange", alert=True)
 			
 			if total_removed == 0 and len(failed_items) == len(doc.agreement_items):
-				frappe.throw(_("No price records could be removed:") + f"\n{error_summary}", ValidationError)
+				frappe.throw(_("❌ No price records could be removed!") + f"\n{error_summary}", ValidationError)
 		
 	except frappe.exceptions.LinkValidationError as e:
 		_handle_agreement_error(e, "Item Price Cleanup", doc.name)

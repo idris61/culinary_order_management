@@ -25,6 +25,12 @@ class Agreement(Document):
 		# Check for overlapping agreements
 		self.check_overlapping_agreements()
 	
+	def on_submit(self):
+		"""Submit edildiğinde fiyat listelerini oluştur."""
+		# External hook fonksiyonunu çağır
+		from culinary_order_management.culinary_order_management.agreement import create_price_list_for_agreement
+		create_price_list_for_agreement(self, "on_submit")
+	
 	def on_update_after_submit(self):
 		"""Allow limited updates after submit."""
 		if self.has_value_changed("valid_from") or self.has_value_changed("valid_to"):
@@ -32,6 +38,10 @@ class Agreement(Document):
 		
 		if self.has_value_changed("customer") or self.has_value_changed("supplier"):
 			frappe.throw(_("Customer and Supplier cannot be changed after submission."))
+		
+		# Fiyatları senkronize et
+		from culinary_order_management.culinary_order_management.agreement import sync_item_prices
+		sync_item_prices(self, "on_update_after_submit")
 	
 	def validate_dates(self):
 		"""Validate validity dates."""
@@ -124,8 +134,11 @@ class Agreement(Document):
 				self.status = "Active"
 	
 	def on_cancel(self):
-		"""İptal edildiğinde status güncelle."""
+		"""İptal edildiğinde status güncelle ve fiyatları temizle."""
 		self.update_status()
+		# External hook fonksiyonunu çağır (fiyatları temizler)
+		from culinary_order_management.culinary_order_management.agreement import cleanup_item_prices
+		cleanup_item_prices(self, "on_cancel")
 
 
 @frappe.whitelist()
