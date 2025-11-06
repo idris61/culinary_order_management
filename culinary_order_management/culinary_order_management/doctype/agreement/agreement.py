@@ -26,10 +26,17 @@ class Agreement(Document):
 		self.check_overlapping_agreements()
 	
 	def on_submit(self):
-		"""Submit edildiğinde fiyat listelerini oluştur."""
+		"""Submit edildiğinde fiyat listelerini oluştur.
+		
+		Sadece aktif anlaşmalar için fiyatları oluştur.
+		Başlamadı durumundakiler scheduled job ile aktif olunca oluşturulacak.
+		"""
 		# External hook fonksiyonunu çağır
 		from culinary_order_management.culinary_order_management.agreement import create_price_list_for_agreement
-		create_price_list_for_agreement(self, "on_submit")
+		
+		# Sadece aktif anlaşmalar için fiyat oluştur
+		if self.status == "Active":
+			create_price_list_for_agreement(self, "on_submit")
 	
 	def on_update_after_submit(self):
 		"""Allow limited updates after submit."""
@@ -76,36 +83,28 @@ class Agreement(Document):
 				frappe.throw(_("Row {0}: Please enter a valid price").format(item.idx))
 	
 	def check_overlapping_agreements(self):
-		"""Check for overlapping active agreements for same customer-supplier."""
+		"""Aynı müşteri-tedarikçi için aktif anlaşma kontrolü (tarih bağımsız)."""
 		if self.docstatus != 0:
 			return
 		
-		overlapping = frappe.db.sql("""
-			SELECT name, valid_from, valid_to
+		# Eğer replacement işlemi içindeyse kontrolü atla
+		if self.flags.get("is_replacement"):
+			return
+		
+		active_agreements = frappe.db.sql("""
+			SELECT name, valid_from, valid_to, status
 			FROM `tabAgreement`
 			WHERE customer = %s
 			  AND supplier = %s
 			  AND docstatus = 1
 			  AND name != %s
-			  AND (
-			      (valid_from <= %s AND valid_to >= %s)
-			      OR (valid_from <= %s AND valid_to >= %s)
-			      OR (valid_from >= %s AND valid_to <= %s)
-			  )
-		""", (
-			self.customer,
-			self.supplier,
-			self.name,
-			self.valid_from, self.valid_from,
-			self.valid_to, self.valid_to,
-			self.valid_from, self.valid_to
-		), as_dict=True)
+		""", (self.customer, self.supplier, self.name), as_dict=True)
 		
-		if overlapping:
-			agreement_names = ", ".join([d.name for d in overlapping])
+		if active_agreements:
+			agreement_names = ", ".join([d.name for d in active_agreements])
 			frappe.throw(
-				_("Active agreement exists for this customer-supplier combination in the same date range: {0}").format(agreement_names),
-				title=_("Overlapping Agreement")
+				_("Aktif anlaşma mevcut: {0}. Lütfen önce mevcut anlaşmayı iptal edin.").format(agreement_names),
+				title=_("Aktif Anlaşma Var")
 			)
 	
 	def update_status(self):
@@ -134,11 +133,93 @@ class Agreement(Document):
 				self.status = "Active"
 	
 	def on_cancel(self):
-		"""İptal edildiğinde status güncelle ve fiyatları temizle."""
+		"""İptal edildiğinde status güncelle, Price List'i deaktive et ve fiyatları temizle."""
 		self.update_status()
+		
+		# Price List'i deaktive et (ama önce başka aktif anlaşma var mı kontrol et)
+		if self.customer:
+			price_list_name = f"{self.customer}"
+			if frappe.db.exists("Price List", price_list_name):
+				# Aynı müşteri için başka aktif anlaşma var mı?
+				other_active = frappe.db.count("Agreement", {
+					"customer": self.customer,
+					"docstatus": 1,
+					"status": "Active",
+					"name": ["!=", self.name]
+				})
+				
+				# Başka aktif anlaşma yoksa Price List'i deaktive et
+				if not other_active:
+					frappe.db.set_value("Price List", price_list_name, "enabled", 0, update_modified=False)
+		
 		# External hook fonksiyonunu çağır (fiyatları temizler)
 		from culinary_order_management.culinary_order_management.agreement import cleanup_item_prices
 		cleanup_item_prices(self, "on_cancel")
+
+
+@frappe.whitelist()
+def check_active_agreement(customer, supplier, current_agreement=None):
+	"""Müşteri-tedarikçi için aktif anlaşma kontrolü.
+	
+	Returns:
+		dict: {"has_active": bool, "agreements": [{"name": str, "valid_from": date, "valid_to": date}]}
+	"""
+	filters = {
+		"customer": customer,
+		"supplier": supplier,
+		"docstatus": 1
+	}
+	
+	if current_agreement:
+		filters["name"] = ["!=", current_agreement]
+	
+	active = frappe.get_all(
+		"Agreement",
+		filters=filters,
+		fields=["name", "valid_from", "valid_to", "status"]
+	)
+	
+	return {
+		"has_active": len(active) > 0,
+		"agreements": active
+	}
+
+
+@frappe.whitelist()
+def replace_agreement(old_agreement, new_agreement):
+	"""Eski anlaşmayı cancel et, yeni anlaşmayı submit et.
+	
+	Transaction içinde çalışır - hata olursa rollback yapılır.
+	Frappe otomatik transaction yönetimi kullanır.
+	"""
+	try:
+		# Eski anlaşmayı cancel et
+		old_doc = frappe.get_doc("Agreement", old_agreement)
+		if old_doc.docstatus != 1:
+			frappe.throw(_("Eski anlaşma zaten submit edilmemiş"))
+		
+		old_doc.cancel()
+		
+		# Yeni anlaşmayı submit et
+		new_doc = frappe.get_doc("Agreement", new_agreement)
+		if new_doc.docstatus != 0:
+			frappe.throw(_("Yeni anlaşma zaten submit edilmiş"))
+		
+		# Flag ekle - check_overlapping_agreements atlanacak
+		new_doc.flags.is_replacement = True
+		new_doc.submit()
+		
+		return {
+			"success": True,
+			"message": _("Eski anlaşma iptal edildi, yeni anlaşma onaylandı")
+		}
+		
+	except Exception as e:
+		frappe.log_error(
+			message=f"Agreement replacement failed: {str(e)}",
+			title="Agreement Replacement Error"
+		)
+		frappe.throw(_("İşlem başarısız: {0}").format(str(e)))
 
 
 @frappe.whitelist()
@@ -165,11 +246,51 @@ def update_all_agreement_statuses():
 			old_status = doc.status
 			doc.update_status()
 			
-			# Status değiştiyse kaydet
+			# Status değiştiyse kaydet ve Price List'i güncelle
 			if old_status != doc.status:
 				doc.db_set("status", doc.status, update_modified=False)
 				updated_count += 1
 				frappe.logger().info(f"Agreement {doc.name} status güncellendi: {old_status} -> {doc.status}")
+				
+				# Status değişimlerine göre fiyat yönetimi
+				if old_status == "Not Started" and doc.status == "Active":
+					# Anlaşma aktif oldu - fiyatları oluştur
+					from culinary_order_management.culinary_order_management.agreement import create_price_list_for_agreement
+					try:
+						create_price_list_for_agreement(doc, "status_change")
+						frappe.logger().info(f"Agreement {doc.name} aktif oldu - fiyatlar oluşturuldu")
+					except Exception as e:
+						frappe.log_error(
+							message=f"Fiyat oluşturma hatası: {str(e)}",
+							title="Agreement Activation - Price Creation Failed"
+						)
+				
+				elif old_status == "Active" and doc.status == "Expired":
+					# Anlaşma expired oldu - fiyatları temizle
+					from culinary_order_management.culinary_order_management.agreement import cleanup_item_prices
+					try:
+						cleanup_item_prices(doc, "status_change")
+						frappe.logger().info(f"Agreement {doc.name} expired oldu - fiyatlar temizlendi")
+					except Exception as e:
+						frappe.log_error(
+							message=f"Fiyat temizleme hatası: {str(e)}",
+							title="Agreement Expiration - Price Cleanup Failed"
+						)
+				
+				# Price List durumunu güncelle
+				if doc.customer:
+					price_list_name = f"{doc.customer}"
+					if frappe.db.exists("Price List", price_list_name):
+						# Aynı müşteri için herhangi bir aktif anlaşma var mı kontrol et
+						active_count = frappe.db.count("Agreement", {
+							"customer": doc.customer,
+							"docstatus": 1,
+							"status": "Active"
+						})
+						
+						should_enable = 1 if active_count > 0 else 0
+						frappe.db.set_value("Price List", price_list_name, "enabled", should_enable, update_modified=False)
+						frappe.logger().info(f"Price List {price_list_name} {'aktivated' if should_enable else 'deactivated'}")
 			
 			# Kritik: Expired olmuş ve submitted olan agreement'ları otomatik cancel et
 			if doc.status == "Expired" and doc.docstatus == 1:

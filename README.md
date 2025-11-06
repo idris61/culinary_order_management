@@ -29,14 +29,19 @@ Bu uygulama, ERPNext üzerinde çoklu şirket yapısında çalışan bir sipari�
 
 ### 1. Agreement Management (Anlaşma Yönetimi)
 - ✅ Müşteri-Tedarikçi bazlı anlaşmalar
+- ✅ Otomatik adlandırma: `{customer}-{supplier}-{####}`
 - ✅ Ürün bazlı fiyatlandırma
 - ✅ Çoklu para birimi desteği
 - ✅ Tarih aralıklı geçerlilik
 - ✅ Otomatik Price List senkronizasyonu
-- ✅ Çakışan fiyat temizleme
+- ✅ **Agreement bazlı fiyat izolasyonu** (note field ile)
+- ✅ **Aktif anlaşma kontrolü** (aynı müşteri-tedarikçi için tek aktif anlaşma)
+- ✅ **Dialog ile anlaşma değiştirme** (kullanıcı onayı)
 - ✅ **Dinamik status yönetimi** (Taslak/Aktif/Günü Geçmiş/İptal Edildi)
-- ✅ **Otomatik expired agreement iptali**
-- ✅ **Süresi dolan anlaşma fiyatlarının otomatik temizliği**
+- ✅ **Sadece aktif anlaşmalar için fiyat oluşturma**
+- ✅ **Scheduled job ile otomatik fiyat yönetimi**
+- ✅ **Price List aktivasyon kontrolü** (aktif anlaşma varsa enabled)
+- ✅ **Çoklu tedarikçi desteği** (fiyat çakışması yok)
 
 ### 2. Sales Order Validation (Sipariş Doğrulama)
 - ✅ Anlaşma kontrolü (sadece anlaşmalı ürünler)
@@ -113,26 +118,43 @@ Culinary Order Management
 **Ana Fonksiyonlar:**
 
 ```python
+check_overlapping_agreements(self)
+# Aynı müşteri-tedarikçi için aktif anlaşma kontrolü
+# - Tarih bağımsız: sadece docstatus=1 olan kayıt aranır
+# - Replacement flag ile bypass edilebilir
+
+check_active_agreement(customer, supplier, current_agreement)
+# Client-side için API
+# Returns: {"has_active": bool, "agreements": [...]}
+
+replace_agreement(old_agreement, new_agreement)
+# Eski anlaşmayı cancel et, yeni anlaşmayı submit et
+# - Transaction içinde çalışır
+# - Hata olursa rollback
+
 create_price_list_for_agreement(doc, method)
-# Agreement kaydedildiğinde/güncellendiğinde:
+# Price List oluştur ve aktif anlaşma kontrolü yap
 # - Müşteri adında Price List oluşturur
-# - Item Price kayıtlarını oluşturur/günceller
-# - Çakışan tarihlerdeki eski kayıtları temizler
+# - Aktif anlaşma varsa enabled=1, yoksa enabled=0
+# - sync_item_prices() çağırır
 
 sync_item_prices(doc, method)
 # Agreement Item'ları Item Price'a dönüştürür
+# - Agreement referansını note field'a yazar
+# - Agreement name ile fiyat izolasyonu sağlar
+# - Sadece o anlaşmaya ait eski fiyatları temizler
 # - Agreement Price varsa direkt kullanır
 # - Yoksa Standard Selling Rate'e discount_rate uygular
-# - Overlap temizleme yapar
 
 cleanup_item_prices(doc, method)
 # Agreement silindiğinde/iptal edildiğinde:
-# - İlgili Price List'ten ürünleri kaldırır
+# - Agreement name'e göre sadece o anlaşmanın fiyatlarını siler
+# - Diğer tedarikçilerin fiyatları korunur
 
 update_status(self)
 # Agreement status'ünü tarih bazlı hesaplar:
 # - docstatus=0 → "Not Started" (Taslak)
-# - docstatus=2 → "Cancelled" or "Expired"
+# - docstatus=2 → "Cancelled"
 # - docstatus=1:
 #   - bugün < valid_from → "Not Started"
 #   - bugün > valid_to → "Expired"
@@ -141,9 +163,11 @@ update_status(self)
 update_all_agreement_statuses()
 # Günlük scheduler ile çalışır:
 # 1. Tüm agreement'ların status'ünü günceller
-# 2. Expired olanları otomatik cancel eder (docstatus=2)
-# 3. on_cancel hook ile fiyatları temizler
-# 4. Status'ü "Expired" olarak korur (görsel ayrım için)
+# 2. Status değişiminde:
+#    - "Not Started" → "Active": Fiyatları oluştur
+#    - "Active" → "Expired": Fiyatları temizle
+# 3. Price List aktivasyonunu güncelle
+# 4. Expired olanları otomatik cancel eder (docstatus=2)
 ```
 
 **Veri Akışı:**
@@ -159,20 +183,46 @@ Agreement → Price List → Item Price
 ```
 Taslak (Draft)
     ↓ Submit
-Aktif (Active)
-    ↓ Tarihi geçince (Otomatik)
-Günü Geçmiş (Expired) → Cancel edilir → Fiyatlar temizlenir
+Başlamadı (Not Started) → Fiyatlar oluşturulmaz
+    ↓ Tarihi gelince (Scheduled Job)
+Aktif (Active) → Fiyatlar oluşturulur → Price List enabled
+    ↓ Tarihi geçince (Scheduled Job)
+Günü Geçmiş (Expired) → Fiyatlar temizlenir → Cancel edilir
+```
+
+**Çoklu Tedarikçi Senaryosu:**
+```
+Müşteri A - Tedarikçi B (01.11-30.11): Active ✅
+  → Ürün X: 100 TL (note: "A-B-0001")
+  
+Müşteri A - Tedarikçi C (01.12-31.12): Not Started 🔵
+  → Ürün X: Henüz fiyat oluşturulmadı
+
+Price List "Müşteri A":
+  → enabled = 1 (Tedarikçi B aktif olduğu için)
+  → Ürün X: 100 TL (01.11-30.11) ← Sadece bu görünür
+  
+01.12.2025 geldiğinde (Scheduled Job):
+  → Tedarikçi C aktif olur
+  → Ürün X: 120 TL (01.12-31.12) oluşturulur (note: "A-C-0002")
+  → İki fiyat birlikte var ama tarih bazlı filtreleniyor
 ```
 
 **Key Features:**
-- ✅ Natural unique key: (Price List, Item, Currency, Valid From, Valid To)
+- ✅ Natural unique key: (Price List, Item, Currency, Valid From, Valid To, Agreement)
 - ✅ NULL date handling (open-ended ranges)
-- ✅ Automatic overlap cleanup
+- ✅ Agreement-based isolation (note field)
 - ✅ Multi-currency per item
+- ✅ Multi-supplier support (no price conflicts)
+- ✅ **Automatic naming:** `{customer}-{supplier}-{####}`
+- ✅ **Single active agreement per customer-supplier**
+- ✅ **User confirmation dialog** for agreement replacement
 - ✅ **Dynamic status based on dates**
+- ✅ **Price List activation control** (enabled only if active agreements exist)
+- ✅ **Lazy price creation** (prices created only when agreement becomes active)
 - ✅ **Automatic cancellation of expired agreements**
-- ✅ **Scheduled daily status updates**
-- ✅ **Visual distinction: "Expired" vs "Cancelled"**
+- ✅ **Scheduled daily status updates with price management**
+- ✅ **Visual distinction:** "Expired" vs "Cancelled"
 
 ---
 
@@ -484,15 +534,28 @@ DATEV kullanıyorsanız, override otomatik devreye girer.
 ```
 1. Agreement → New
 2. Customer seç
-3. Supplier seç
+3. Supplier seç (aynı müşteri-tedarikçi için aktif anlaşma varsa uyarı)
 4. Valid From / Valid To tarihlerini gir
 5. Items tablosuna ürün ekle:
    - Item Code seç (supplier filter otomatik çalışır)
    - Agreement Price gir (€ 10.00)
    - Currency seç (EUR)
-6. Save
-   → Price List otomatik oluşturulur
-   → Item Price kayıtları oluşturulur
+6. Save → Status hesaplanır
+   - Tarih gelmediyse: "Not Started" (fiyat oluşturulmaz)
+   - Tarih aktifse: "Active" (fiyat oluşturulur)
+7. Submit
+   - Aktif anlaşma varsa → Dialog gösterilir
+     • Evet: Eski anlaşma cancel, yeni anlaşma submit
+     • Hayır: İşlem iptal
+   - Aktif anlaşma yoksa → Normal submit
+```
+
+**Otomatik İşlemler:**
+```
+Scheduled Job (Günlük):
+  1. Tarihi gelen anlaşmalar → Active + Fiyat oluştur
+  2. Tarihi geçen anlaşmalar → Expired + Fiyat sil + Cancel
+  3. Price List aktivasyonu güncelle
 ```
 
 ### 2. Sales Order Oluşturma
@@ -646,6 +709,18 @@ print(datev.attach_print)  # attach_print_custom olmalı
 
 ## 📝 Changelog
 
+### v0.0.3 (2025-11-06)
+- ✅ **Agreement Geliştirmeleri**
+  - Otomatik adlandırma: `{customer}-{supplier}-{####}`
+  - Aktif anlaşma kontrolü (aynı müşteri-tedarikçi için tek aktif anlaşma)
+  - Dialog ile anlaşma değiştirme (kullanıcı onayı)
+  - Agreement bazlı fiyat izolasyonu (note field)
+  - Sadece aktif anlaşmalar için fiyat oluşturma
+  - Scheduled job ile otomatik fiyat yönetimi
+  - Price List aktivasyon kontrolü
+  - Çoklu tedarikçi desteği (fiyat çakışması yok)
+- ✅ Code cleanup & comprehensive testing
+
 ### v0.0.2 (2025-10-31)
 - ✅ **Agreement Status Sistemi**
   - Dinamik status hesaplama (Taslak/Aktif/Günü Geçmiş/İptal Edildi)
@@ -685,6 +760,6 @@ MIT License
 
 ---
 
-**Son Güncelleme:** 2025-10-31
+**Son Güncelleme:** 2025-11-06
 **ERPNext Version:** v15
 **Frappe Version:** v15

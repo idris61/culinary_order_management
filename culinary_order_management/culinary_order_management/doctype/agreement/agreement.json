@@ -1,6 +1,6 @@
 {
  "actions": [],
- "autoname": "format:{customer} - {supplier}",
+ "autoname": "format:{customer}-{supplier}-{####}",
  "creation": "2025-10-15 10:02:35.199602",
  "doctype": "DocType",
  "engine": "InnoDB",

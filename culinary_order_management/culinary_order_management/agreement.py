@@ -83,8 +83,11 @@ def _get_standard_selling_rate(item_code: str, currency: str) -> float:
 	return 0.0
 
 
-def _find_existing_item_price(price_list: str, item_code: str, currency: str, valid_from, valid_upto):
-	"""Find existing Item Price by natural unique keys, handling NULL dates properly."""
+def _find_existing_item_price(price_list: str, item_code: str, currency: str, valid_from, valid_upto, agreement_name: str = None):
+	"""Find existing Item Price by natural unique keys, handling NULL dates properly.
+	
+	Agreement name kullanarak aynı anlaşmaya ait fiyatı bulur.
+	"""
 	query = """
 		SELECT name 
 		FROM `tabItem Price`
@@ -98,25 +101,30 @@ def _find_existing_item_price(price_list: str, item_code: str, currency: str, va
 		      (valid_upto IS NULL AND %s IS NULL) OR (valid_upto = %s)
 		  )
 	"""
-	result = frappe.db.sql(
-		query, 
-		(price_list, item_code, currency, valid_from, valid_from, valid_upto, valid_upto),
-		as_dict=False
-	)
+	params = [price_list, item_code, currency, valid_from, valid_from, valid_upto, valid_upto]
+	
+	# Agreement referansı varsa onu da filtrele
+	if agreement_name:
+		query += " AND (note = %s OR note LIKE %s)"
+		params.extend([agreement_name, f"%{agreement_name}%"])
+	
+	result = frappe.db.sql(query, tuple(params), as_dict=False)
 	return [row[0] for row in result] if result else []
 
 
-def _delete_overlapping_item_prices(price_list: str, item_code: str, new_from, new_upto) -> int:
+def _delete_overlapping_item_prices(price_list: str, item_code: str, new_from, new_upto, agreement_name: str = None) -> int:
 	"""Delete Item Price rows in same price list and item that overlap with given date range.
 
 	If dates are null, treat as open-ended.
 	Uses SQL to find overlapping records, then ORM to delete (triggers hooks).
+	Agreement name kullanarak sadece aynı anlaşmaya ait fiyatları siler.
 	
 	Args:
 		price_list: Price list name
 		item_code: Item code
 		new_from: New start date (can be None)
 		new_upto: New end date (can be None)
+		agreement_name: Agreement name (sadece bu anlaşmaya ait fiyatları sil)
 		
 	Returns:
 		Number of deleted records
@@ -135,6 +143,11 @@ def _delete_overlapping_item_prices(price_list: str, item_code: str, new_from, n
 		# Build SQL query for overlap detection
 		conditions = ["price_list = %s", "item_code = %s"]
 		values = [price_list, item_code]
+		
+		# Agreement filtresi - sadece aynı anlaşmaya ait fiyatları sil
+		if agreement_name:
+			conditions.append("(note = %s OR note LIKE %s)")
+			values.extend([agreement_name, f"%{agreement_name}%"])
 		
 		# Overlap logic
 		if new_from and new_upto:
@@ -352,25 +365,40 @@ def create_price_list_for_agreement(doc, method):
 		for currency in currencies_used:
 			price_list_name = f"{doc.customer}"
 			
+			# Müşterinin herhangi bir aktif anlaşması var mı kontrol et
+			active_count = frappe.db.count("Agreement", {
+				"customer": doc.customer,
+				"docstatus": 1,
+				"status": "Active"
+			})
+			should_enable = 1 if active_count > 0 else 0
+			
 			try:
 				if not frappe.db.exists("Price List", price_list_name):
 					price_list = frappe.new_doc("Price List")
 					price_list.price_list_name = price_list_name
-					price_list.enabled = 1
+					price_list.enabled = should_enable
 					price_list.selling = 1
 					price_list.currency = currency
 					price_list.insert(ignore_permissions=True)
 					price_list_created = True
-					msgprint(_("✅ Price List '{0}' created ({1})").format(price_list_name, currency), indicator="green")
+					if should_enable:
+						msgprint(_("✅ Price List '{0}' created and activated ({1})").format(price_list_name, currency), indicator="green")
+					else:
+						msgprint(_("✅ Price List '{0}' created (will be activated when agreement becomes active)").format(price_list_name), indicator="blue")
 				else:
 					price_list = frappe.get_doc("Price List", price_list_name)
 					price_list_created = True
-					if not price_list.enabled:
-						price_list.enabled = 1
+					# Müşterinin aktif anlaşma durumuna göre price list'i aktive/deaktive et
+					if price_list.enabled != should_enable:
+						price_list.enabled = should_enable
 						price_list.save(ignore_permissions=True)
-						msgprint(_("✅ Price List '{0}' activated").format(price_list_name), indicator="green")
+						if should_enable:
+							msgprint(_("✅ Price List '{0}' activated").format(price_list_name), indicator="green")
+						else:
+							msgprint(_("ℹ️ Price List '{0}' deactivated (no active agreements)").format(price_list_name), indicator="orange")
 					else:
-						msgprint(_("✅ Price List '{0}' already exists and is active").format(price_list_name), indicator="blue")
+						msgprint(_("✅ Price List '{0}' already exists").format(price_list_name), indicator="blue")
 						
 			except frappe.exceptions.DuplicateEntryError as e:
 				if frappe.db.exists("Price List", price_list_name):
@@ -483,11 +511,13 @@ def sync_item_prices(doc, method):
 				price_list_name = f"{doc.customer}"
 				
 				try:
+					# Sadece bu anlaşmaya ait fiyatları temizle
 					deleted_count = _delete_overlapping_item_prices(
 						price_list_name, 
 						item.item_code, 
 						doc.valid_from, 
-						doc.valid_to
+						doc.valid_to,
+						doc.name  # Agreement name ekledik
 					)
 					deleted_prices += deleted_count
 				except ValidationError as e:
@@ -531,12 +561,14 @@ def sync_item_prices(doc, method):
 					failed_items.append((item.item_code, error_msg))
 					continue
 				
+				# Bu anlaşmaya ait mevcut fiyatı bul
 				existing = _find_existing_item_price(
 					price_list_name, 
 					item.item_code, 
 					item_ccy, 
 					doc.valid_from, 
-					doc.valid_to
+					doc.valid_to,
+					doc.name  # Agreement name ekledik
 				)
 				
 				try:
@@ -545,6 +577,8 @@ def sync_item_prices(doc, method):
 						ip.price_list_rate = effective_rate
 						if hasattr(ip, "customer"):
 							setattr(ip, "customer", doc.customer)
+						# Agreement referansını güncelle
+						ip.note = doc.name
 						ip.save(ignore_permissions=True)
 					else:
 						ip = frappe.new_doc("Item Price")
@@ -554,6 +588,8 @@ def sync_item_prices(doc, method):
 						ip.currency = item_ccy
 						ip.valid_from = doc.valid_from
 						ip.valid_upto = doc.valid_to
+						# Agreement referansını kaydet (note alanına)
+						ip.note = doc.name
 						if hasattr(ip, "customer"):
 							setattr(ip, "customer", doc.customer)
 						ip.insert(ignore_permissions=True)
@@ -658,11 +694,13 @@ def cleanup_item_prices(doc, method):
 				continue
 			
 			try:
+				# Sadece bu anlaşmaya ait fiyatları temizle
 				removed = _delete_overlapping_item_prices(
 					price_list_name, 
 					item.item_code, 
 					doc.valid_from, 
-					doc.valid_to
+					doc.valid_to,
+					doc.name  # Agreement name ekledik
 				)
 				total_removed += removed
 				
@@ -707,8 +745,6 @@ def cleanup_item_prices(doc, method):
 		
 	except ValidationError as e:
 		_handle_agreement_error(e, "Item Price Cleanup", doc.name)
-		
+	
 	except Exception as e:
 		_handle_agreement_error(e, "Item Price Cleanup", doc.name)
-
-
