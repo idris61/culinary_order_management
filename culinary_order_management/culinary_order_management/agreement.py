@@ -84,9 +84,10 @@ def _get_standard_selling_rate(item_code: str, currency: str) -> float:
 
 
 def _find_existing_item_price(price_list: str, item_code: str, currency: str, valid_from, valid_upto, agreement_name: str = None):
-	"""Find existing Item Price by natural unique keys, handling NULL dates properly.
+	"""Find existing Item Price by agreement name (öncelikli) veya price list + item kombinasyonu.
 	
 	Agreement name kullanarak aynı anlaşmaya ait fiyatı bulur.
+	Tarih kontrolü YAPILMAZ - sadece agreement name ile eşleşme.
 	"""
 	query = """
 		SELECT name 
@@ -94,16 +95,10 @@ def _find_existing_item_price(price_list: str, item_code: str, currency: str, va
 		WHERE price_list = %s
 		  AND item_code = %s
 		  AND currency = %s
-		  AND (
-		      (valid_from IS NULL AND %s IS NULL) OR (valid_from = %s)
-		  )
-		  AND (
-		      (valid_upto IS NULL AND %s IS NULL) OR (valid_upto = %s)
-		  )
 	"""
-	params = [price_list, item_code, currency, valid_from, valid_from, valid_upto, valid_upto]
+	params = [price_list, item_code, currency]
 	
-	# Agreement referansı varsa onu da filtrele
+	# Agreement referansı varsa onu da filtrele (EN ÖNEMLİ)
 	if agreement_name:
 		query += " AND (note = %s OR note LIKE %s)"
 		params.extend([agreement_name, f"%{agreement_name}%"])
