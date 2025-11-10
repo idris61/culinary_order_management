@@ -12,7 +12,12 @@
   "uom",
   "standard_selling_rate",
   "price_list_rate",
-  "currency"
+  "currency",
+  "section_current_prices",
+  "current_standard_rate",
+  "column_break_current",
+  "current_agreement_rate",
+  "price_change_indicator"
  ],
  "fields": [
   {
@@ -78,11 +83,47 @@
    "label": "Currency",
    "options": "Currency",
    "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:!doc.__islocal && parent.docstatus == 1",
+   "fieldname": "section_current_prices",
+   "fieldtype": "Section Break",
+   "label": "Current Prices (Live)"
+  },
+  {
+   "fieldname": "current_standard_rate",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Current Standard Rate",
+   "no_copy": 1,
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_current",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "current_agreement_rate",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Current Agreement Rate",
+   "no_copy": 1,
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "price_change_indicator",
+   "fieldtype": "HTML",
+   "label": "Price Change",
+   "no_copy": 1,
+   "read_only": 1
   }
  ],
  "istable": 1,
  "links": [],
- "modified": "2025-10-15 11:33:34.817416",
+ "modified": "2025-11-10 21:45:34.272902",
  "modified_by": "Administrator",
  "module": "Culinary Order Management",
  "name": "Agreement Item",

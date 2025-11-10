@@ -77,6 +77,8 @@ doctype_list_js = {
 
 # Fixtures
 # ----------
+# Test data fixtures removed - causing duplicate Item Price errors during migration
+# Item and Item Price fixtures should be imported manually if needed
 fixtures = [
 	{
 		"dt": "Custom Field",
@@ -84,6 +86,7 @@ fixtures = [
 			["name", "in", ["Item-supplier_display"]]
 		]
 	}
+	# Item ve Item Price fixture'ları kaldırıldı (migration duplicate hatası)
 ]
 
 # Jinja
@@ -154,6 +157,12 @@ doc_events = {
 	},
 	# Agreement hooks - Artık Agreement class içinde direkt çağrılıyor (agreement.py)
 	# Fiyat yönetimi: on_submit → create_price_list, on_update_after_submit → sync_prices, on_cancel → cleanup_prices
+	
+	# Item Price hook - Standard Selling fiyat güncellendiğinde Agreement'ları otomatik güncelle
+	"Item Price": {
+		"after_insert": "culinary_order_management.culinary_order_management.agreement.sync_agreement_prices_on_standard_change",
+		"on_update": "culinary_order_management.culinary_order_management.agreement.sync_agreement_prices_on_standard_change",
+	},
 }
 
 # NOT: DATEV PDF override monkey patch ile yapılıyor (__init__.py)

@@ -748,3 +748,504 @@ def cleanup_item_prices(doc, method):
 	
 	except Exception as e:
 		_handle_agreement_error(e, "Item Price Cleanup", doc.name)
+
+
+def sync_agreement_prices_on_standard_change(doc, method):
+	"""Item Price (Standard Selling) güncellendiğinde ilgili Agreement'ların Item Price kayıtlarını güncelle.
+	
+	ÖNEMLİ: Agreement Item'a DOKUNULMAZ (submitted belge)
+	Sadece Item Price kayıtları güncellenir.
+	
+	Args:
+		doc: Item Price document
+		method: ERPNext hook method name (after_insert veya on_update)
+	"""
+	# Sadece Standard Selling price list için çalış
+	if doc.price_list != "Standard Selling":
+		return
+	
+	# Item code kontrolü
+	if not doc.item_code:
+		return
+	
+	# Değişiklik var mı kontrol et (sadece update için - insert'te atlıyoruz)
+	if method == "on_update" and not doc.has_value_changed("price_list_rate"):
+		return
+	
+	try:
+		# Bu item'ı içeren aktif agreement'ları bul
+		agreements = frappe.db.sql("""
+			SELECT DISTINCT 
+				a.name, 
+				a.customer, 
+				a.discount_rate,
+				a.valid_from,
+				a.valid_to,
+				ai.item_code,
+				ai.currency
+			FROM `tabAgreement` a
+			JOIN `tabAgreement Item` ai ON ai.parent = a.name
+			WHERE a.docstatus = 1
+			  AND a.status = 'Active'
+			  AND ai.item_code = %s
+		""", (doc.item_code,), as_dict=True)
+		
+		if not agreements:
+			frappe.logger().info(f"No active agreements found for item {doc.item_code}")
+			return
+		
+		updated_count = 0
+		failed_agreements = []
+		
+		for agreement_data in agreements:
+			try:
+				# Yeni fiyatı hesapla
+				new_standard_rate = doc.price_list_rate
+				discount_rate = frappe.utils.flt(agreement_data.discount_rate or 0)
+				
+				if discount_rate > 0:
+					new_price = new_standard_rate * (1 - discount_rate / 100.0)
+				else:
+					new_price = new_standard_rate
+				
+				# Price List name
+				price_list_name = agreement_data.customer
+				currency = agreement_data.currency or doc.currency
+				
+				# Item Price'ı güncelle (eski fiyatı da döndürür)
+				updated, old_agr_price = update_agreement_item_price(
+					price_list=price_list_name,
+					item_code=agreement_data.item_code,
+					currency=currency,
+					new_price=new_price,
+					valid_from=agreement_data.valid_from,
+					valid_upto=agreement_data.valid_to,
+					agreement_name=agreement_data.name
+				)
+				
+				if updated:
+					updated_count += 1
+					frappe.logger().info(
+						f"✅ Agreement {agreement_data.name} - {agreement_data.item_code}: "
+						f"Price updated from {old_agr_price} to {new_price} {currency}"
+					)
+					
+					# Eski standard rate bul (Agreement Item'dan)
+					old_std_rate = frappe.db.get_value("Agreement Item", {
+						"parent": agreement_data.name,
+						"item_code": agreement_data.item_code
+					}, "standard_selling_rate") or 0
+					
+					# Child table'a kaydet
+					create_price_change_log(
+						agreement_name=agreement_data.name,
+						item_code=agreement_data.item_code,
+						old_price=old_agr_price,
+						new_price=new_price,
+						currency=currency,
+						old_standard=float(old_std_rate),
+						new_standard=new_standard_rate,
+						source="Automatic"
+					)
+					
+			except Exception as e:
+				failed_agreements.append((agreement_data.name, str(e)))
+				frappe.log_error(
+					message=f"Agreement {agreement_data.name} price update failed: {str(e)}\n{traceback.format_exc()}",
+					title="Agreement Price Sync - Item Update Failed"
+				)
+		
+		# Sonuç mesajı
+		if updated_count > 0:
+			msg = _("✅ {0} agreement price updated for {1}").format(updated_count, doc.item_code)
+			msgprint(msg, indicator="green", alert=True)
+			
+			# Log oluştur
+			frappe.logger().info(f"Standard price change: {doc.item_code} - {updated_count} agreements updated")
+		
+		if failed_agreements:
+			error_msg = _("⚠️ {0} agreement(s) could not be updated:").format(len(failed_agreements)) + "\n"
+			for name, error in failed_agreements[:3]:
+				error_msg += f"  - {name}: {error}\n"
+			
+			if len(failed_agreements) > 3:
+				error_msg += f"  ... and {len(failed_agreements) - 3} more\n"
+			
+			msgprint(error_msg, indicator="orange", alert=True)
+			
+	except Exception as e:
+		frappe.log_error(
+			message=f"Failed to sync agreement prices for {doc.item_code}: {str(e)}\n{traceback.format_exc()}",
+			title="Agreement Price Sync - Critical Error"
+		)
+		# Re-raise etme - Item Price update'i iptal etmesin
+		msgprint(
+			_("⚠️ Agreement price sync failed: {0}").format(str(e)),
+			indicator="red",
+			alert=True
+		)
+
+
+def update_agreement_item_price(
+	price_list: str,
+	item_code: str,
+	currency: str,
+	new_price: float,
+	valid_from,
+	valid_upto,
+	agreement_name: str
+) -> tuple:
+	"""Belirli bir Agreement'ın Item Price kaydını güncelle.
+	
+	Args:
+		price_list: Price list name (customer name)
+		item_code: Item code
+		currency: Currency
+		new_price: New price
+		valid_from: Valid from date
+		valid_upto: Valid to date
+		agreement_name: Agreement name (for note field)
+		
+	Returns:
+		tuple: (success: bool, old_price: float) - Eski fiyatı da döndür
+	"""
+	try:
+		# Mevcut Item Price'ı bul
+		existing = _find_existing_item_price(
+			price_list,
+			item_code,
+			currency,
+			valid_from,
+			valid_upto,
+			agreement_name
+		)
+		
+		if not existing:
+			frappe.log_error(
+				message=f"Item Price not found for {item_code} in {price_list} (Agreement: {agreement_name})",
+				title="Agreement Price Update - Item Price Not Found"
+			)
+			return (False, 0)
+		
+		# ÖNCE eski fiyatı al
+		item_price_name = existing[0]
+		old_price = frappe.db.get_value("Item Price", item_price_name, "price_list_rate")
+		
+		# Item Price'ı güncelle
+		frappe.db.set_value(
+			"Item Price",
+			item_price_name,
+			"price_list_rate",
+			new_price,
+			update_modified=True
+		)
+		
+		# Commit et (önemli!)
+		frappe.db.commit()
+		
+		frappe.logger().info(
+			f"Item Price {item_price_name} updated: {old_price} → {new_price} {currency}"
+		)
+		
+		return (True, float(old_price) if old_price else 0)
+		
+	except Exception as e:
+		frappe.log_error(
+			message=f"Failed to update Item Price: {str(e)}\n{traceback.format_exc()}",
+			title="Agreement Price Update - Update Failed"
+		)
+		return (False, 0)
+
+
+@frappe.whitelist()
+def manual_update_agreement_prices(agreement_name: str):
+	"""Manuel olarak Agreement'ın Item Price kayıtlarını güncelle.
+	
+	Args:
+		agreement_name: Agreement name
+		
+	Returns:
+		dict: {"success": bool, "updated_count": int, "price_changes": list}
+	"""
+	try:
+		# Agreement'ı getir
+		agreement = frappe.get_doc("Agreement", agreement_name)
+		
+		# Sadece submitted ve aktif agreement'lar güncellenebilir
+		if agreement.docstatus != 1:
+			return {
+				"success": False,
+				"error": _("Only submitted agreements can be updated")
+			}
+		
+		if agreement.status != "Active":
+			return {
+				"success": False,
+				"error": _("Only active agreements can be updated")
+			}
+		
+		updated_count = 0
+		price_changes = []
+		failed_items = []
+		
+		for item in agreement.agreement_items:
+			if not item.item_code:
+				continue
+			
+			try:
+				# Güncel Standard Selling fiyatını çek
+				currency = item.currency or frappe.db.get_value("Company", {"is_group": 0}, "default_currency") or "EUR"
+				new_standard_rate = _get_standard_selling_rate(item.item_code, currency)
+				
+				if not new_standard_rate or new_standard_rate <= 0:
+					failed_items.append((item.item_code, "Standard Selling price not found"))
+					continue
+				
+				# Yeni fiyatı hesapla
+				discount_rate = frappe.utils.flt(agreement.discount_rate or 0)
+				if discount_rate > 0:
+					new_price = new_standard_rate * (1 - discount_rate / 100.0)
+				else:
+					new_price = new_standard_rate
+				
+				# Eski fiyatı al
+				price_list_name = agreement.customer
+				existing = _find_existing_item_price(
+					price_list_name,
+					item.item_code,
+					currency,
+					agreement.valid_from,
+					agreement.valid_to,
+					agreement.name
+				)
+				
+				if not existing:
+					failed_items.append((item.item_code, "Item Price not found"))
+					continue
+				
+				# Eski fiyatı oku
+				old_price = frappe.db.get_value("Item Price", existing[0], "price_list_rate")
+				
+				# Fiyat değişti mi?
+				if abs(float(old_price) - new_price) < 0.01:
+					continue
+				
+				# Güncelle (eski fiyatı döndürür)
+				updated, returned_old_price = update_agreement_item_price(
+					price_list=price_list_name,
+					item_code=item.item_code,
+					currency=currency,
+					new_price=new_price,
+					valid_from=agreement.valid_from,
+					valid_upto=agreement.valid_to,
+					agreement_name=agreement.name
+				)
+				
+				if updated:
+					updated_count += 1
+					price_changes.append({
+						"item_code": item.item_code,
+						"old_price": returned_old_price,
+						"new_price": new_price,
+						"currency": currency
+					})
+					
+					# Log oluştur (child table'a kaydet)
+					create_price_change_log(
+						agreement_name=agreement.name,
+						item_code=item.item_code,
+						old_price=returned_old_price,
+						new_price=new_price,
+						currency=currency,
+						old_standard=frappe.utils.flt(item.standard_selling_rate),
+						new_standard=new_standard_rate,
+						source="Manual"
+					)
+					
+			except Exception as e:
+				failed_items.append((item.item_code, str(e)))
+				frappe.log_error(
+					message=f"Failed to update price for {item.item_code}: {str(e)}\n{traceback.format_exc()}",
+					title="Manual Agreement Price Update - Item Failed"
+				)
+		
+		# Sonuç mesajı
+		result = {
+			"success": True,
+			"updated_count": updated_count,
+			"price_changes": price_changes
+		}
+		
+		if failed_items:
+			error_msg = _("⚠️ {0} item(s) could not be updated:").format(len(failed_items)) + "\n"
+			for item_code, reason in failed_items[:3]:
+				error_msg += f"  - {item_code}: {reason}\n"
+			result["warning"] = error_msg
+		
+		frappe.db.commit()
+		return result
+		
+	except Exception as e:
+		frappe.db.rollback()
+		frappe.log_error(
+			message=f"Manual agreement price update failed: {str(e)}\n{traceback.format_exc()}",
+			title="Manual Agreement Price Update - Failed"
+		)
+		return {
+			"success": False,
+			"error": str(e)
+		}
+
+
+def create_price_change_log(
+	agreement_name: str,
+	item_code: str,
+	old_price: float,
+	new_price: float,
+	currency: str,
+	old_standard: float = 0,
+	new_standard: float = 0,
+	source: str = "Automatic"
+):
+	"""Fiyat değişiklik logu oluştur (child table'a kaydet).
+	
+	Args:
+		agreement_name: Agreement name
+		item_code: Item code
+		old_price: Old agreement price
+		new_price: New agreement price
+		currency: Currency
+		old_standard: Old standard selling rate
+		new_standard: New standard selling rate
+		source: "Automatic" or "Manual"
+	"""
+	try:
+		# Child table'a doğrudan SQL ile ekle (submitted belge için)
+		diff = new_price - old_price
+		diff_pct = (diff / old_price * 100) if old_price > 0 else 0
+		
+		# Yeni row oluştur
+		row = frappe.new_doc("Agreement Item Price History")
+		row.parent = agreement_name
+		row.parenttype = "Agreement"
+		row.parentfield = "price_history"
+		row.change_date = frappe.utils.now()
+		row.item_code = item_code
+		row.old_standard_rate = old_standard
+		row.new_standard_rate = new_standard
+		row.old_agreement_rate = old_price
+		row.new_agreement_rate = new_price
+		row.currency = currency
+		row.change_percentage = diff_pct
+		row.changed_by = frappe.session.user
+		row.source = source
+		row.insert(ignore_permissions=True)
+		
+		frappe.db.commit()
+		
+		frappe.logger().info(f"Price change logged to child table: {agreement_name} - {item_code}: {old_price} → {new_price}")
+		
+	except Exception as e:
+		frappe.log_error(
+			message=f"Failed to create price change log: {str(e)}\n{traceback.format_exc()}",
+			title="Price Change Log - Failed"
+		)
+
+
+@frappe.whitelist()
+def clear_price_history(agreement_name: str, item_code: str = None):
+	"""Agreement'ın fiyat değişiklik geçmişini temizle.
+	
+	Args:
+		agreement_name: Agreement name
+		item_code: Opsiyonel - Belirli bir ürün için temizle
+		
+	Returns:
+		dict: {"success": bool, "deleted_count": int}
+	"""
+	try:
+		# Permission check
+		if not frappe.has_permission("Agreement", "write"):
+			return {
+				"success": False,
+				"error": _("You don't have permission to modify Agreement")
+			}
+		
+		# Silme filtreleri
+		filters = {"parent": agreement_name}
+		if item_code:
+			filters["item_code"] = item_code
+		
+		# Kaç kayıt silinecek?
+		count = frappe.db.count("Agreement Item Price History", filters)
+		
+		if count == 0:
+			return {
+				"success": True,
+				"deleted_count": 0,
+				"message": _("No records to delete")
+			}
+		
+		# SQL ile toplu silme (hızlı)
+		frappe.db.delete("Agreement Item Price History", filters)
+		frappe.db.commit()
+		
+		frappe.logger().info(f"Price history cleared: {agreement_name} - {count} records deleted")
+		
+		return {
+			"success": True,
+			"deleted_count": count,
+			"message": _("{0} records deleted").format(count)
+		}
+		
+	except Exception as e:
+		frappe.db.rollback()
+		frappe.log_error(
+			message=f"Failed to clear price history: {str(e)}\n{traceback.format_exc()}",
+			title="Clear Price History - Failed"
+		)
+		return {
+			"success": False,
+			"error": str(e)
+		}
+
+
+@frappe.whitelist()
+def delete_price_history_row(row_name: str):
+	"""Tek bir price history kaydını sil.
+	
+	Args:
+		row_name: Price history row name
+		
+	Returns:
+		dict: {"success": bool}
+	"""
+	try:
+		# Permission check
+		if not frappe.has_permission("Agreement", "write"):
+			return {
+				"success": False,
+				"error": _("You don't have permission to modify Agreement")
+			}
+		
+		# ORM ile sil (hooks tetiklenir)
+		frappe.delete_doc("Agreement Item Price History", row_name, ignore_permissions=True, force=True)
+		frappe.db.commit()
+		
+		frappe.logger().info(f"Price history row deleted: {row_name}")
+		
+		return {
+			"success": True,
+			"message": _("Record deleted")
+		}
+		
+	except Exception as e:
+		frappe.db.rollback()
+		frappe.log_error(
+			message=f"Failed to delete price history row: {str(e)}\n{traceback.format_exc()}",
+			title="Delete Price History Row - Failed"
+		)
+		return {
+			"success": False,
+			"error": str(e)
+		}

@@ -1,0 +1,110 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-11-10 21:41:51.651216",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "change_date",
+  "item_code",
+  "old_standard_rate",
+  "new_standard_rate",
+  "old_agreement_rate",
+  "new_agreement_rate",
+  "currency",
+  "change_percentage",
+  "changed_by",
+  "source"
+ ],
+ "fields": [
+  {
+   "fieldname": "change_date",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Change Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Item Code",
+   "options": "Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "old_standard_rate",
+   "fieldtype": "Currency",
+   "label": "Old Standard Rate",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "new_standard_rate",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "New Standard Rate",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "old_agreement_rate",
+   "fieldtype": "Currency",
+   "label": "Old Agreement Rate",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "new_agreement_rate",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "New Agreement Rate",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Currency",
+   "options": "Currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "change_percentage",
+   "fieldtype": "Percent",
+   "label": "Change %",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "changed_by",
+   "fieldtype": "Link",
+   "label": "Changed By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "label": "Source",
+   "options": "Automatic\nManual",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2025-11-10 21:41:51.651216",
+ "modified_by": "Administrator",
+ "module": "Culinary Order Management",
+ "name": "Agreement Item Price History",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

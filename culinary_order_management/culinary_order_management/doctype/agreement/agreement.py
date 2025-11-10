@@ -11,6 +11,132 @@ class Agreement(Document):
 	Status is based on docstatus and validity dates.
 	"""
 	
+	def onload(self):
+		"""Load güncel fiyatları hesapla ve virtual field'lara set et."""
+		if self.docstatus != 1:
+			return
+		
+		from culinary_order_management.culinary_order_management.agreement import (
+			_get_standard_selling_rate,
+			_find_existing_item_price
+		)
+		
+		for item in self.agreement_items:
+			if not item.item_code:
+				continue
+			
+			try:
+				# Güncel Standard Selling fiyatı
+				currency = item.currency or frappe.db.get_value("Company", {"is_group": 0}, "default_currency") or "EUR"
+				current_standard = _get_standard_selling_rate(item.item_code, currency)
+				
+				# Güncel Agreement fiyatı (Item Price'dan)
+				price_list_name = self.customer
+				current_agreement = self._get_current_agreement_rate(item.item_code, price_list_name, currency)
+				
+				# Virtual field'lara set et
+				item.current_standard_rate = current_standard
+				item.current_agreement_rate = current_agreement
+				
+				# Fiyat değişimi HTML göstergesi
+				item.price_change_indicator = self._get_price_change_html(
+					original_standard=frappe.utils.flt(item.standard_selling_rate),
+					current_standard=current_standard,
+					original_agreement=frappe.utils.flt(item.price_list_rate),
+					current_agreement=current_agreement,
+					currency=currency
+				)
+				
+			except Exception as e:
+				frappe.log_error(
+					message=f"Failed to load current prices for {item.item_code}: {str(e)}",
+					title="Agreement Load - Price Calculation Failed"
+				)
+	
+	def _get_current_agreement_rate(self, item_code: str, price_list: str, currency: str) -> float:
+		"""Item Price'dan güncel Agreement fiyatını çek."""
+		try:
+			item_price = frappe.db.get_value(
+				"Item Price",
+				{
+					"price_list": price_list,
+					"item_code": item_code,
+					"currency": currency,
+					"note": ["like", f"%{self.name}%"]
+				},
+				"price_list_rate"
+			)
+			
+			return float(item_price) if item_price else 0.0
+			
+		except Exception:
+			return 0.0
+	
+	def _get_price_change_html(
+		self,
+		original_standard: float,
+		current_standard: float,
+		original_agreement: float,
+		current_agreement: float,
+		currency: str
+	) -> str:
+		"""Fiyat değişimi HTML göstergesi oluştur."""
+		
+		# Değişiklik hesapla
+		standard_diff = current_standard - original_standard
+		standard_pct = (standard_diff / original_standard * 100) if original_standard > 0 else 0
+		
+		agreement_diff = current_agreement - original_agreement
+		agreement_pct = (agreement_diff / original_agreement * 100) if original_agreement > 0 else 0
+		
+		# Renk belirleme
+		def get_color(diff):
+			if abs(diff) < 0.01:
+				return "#28a745"  # green
+			return "#dc3545" if diff > 0 else "#28a745"  # red/green
+		
+		standard_color = get_color(standard_diff)
+		agreement_color = get_color(agreement_diff)
+		
+		# Değişiklik yoksa
+		if abs(standard_diff) < 0.01 and abs(agreement_diff) < 0.01:
+			return '<div style="padding: 10px; color: #28a745; font-weight: bold;">✅ Prices are up to date</div>'
+		
+		html = f"""
+		<div style="padding: 10px; background-color: #f8f9fa; border-radius: 5px; border-left: 4px solid {agreement_color};">
+			<table style="width: 100%; font-size: 12px; border-collapse: collapse;">
+				<thead>
+					<tr style="border-bottom: 2px solid #dee2e6;">
+						<th style="text-align: left; padding: 5px; font-weight: bold;">Type</th>
+						<th style="text-align: right; padding: 5px; font-weight: bold;">Original</th>
+						<th style="text-align: right; padding: 5px; font-weight: bold;">Current</th>
+						<th style="text-align: right; padding: 5px; font-weight: bold;">Change</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td style="padding: 5px;">Standard Selling</td>
+						<td style="text-align: right; padding: 5px;">{original_standard:.2f} {currency}</td>
+						<td style="text-align: right; padding: 5px; font-weight: bold;">{current_standard:.2f} {currency}</td>
+						<td style="text-align: right; padding: 5px; color: {standard_color}; font-weight: bold;">
+							{standard_diff:+.2f} ({standard_pct:+.1f}%)
+						</td>
+					</tr>
+					<tr style="background-color: #ffffff;">
+						<td style="padding: 5px;">Agreement Price</td>
+						<td style="text-align: right; padding: 5px;">{original_agreement:.2f} {currency}</td>
+						<td style="text-align: right; padding: 5px; font-weight: bold;">{current_agreement:.2f} {currency}</td>
+						<td style="text-align: right; padding: 5px; color: {agreement_color}; font-weight: bold;">
+							{agreement_diff:+.2f} ({agreement_pct:+.1f}%)
+						</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+		"""
+		
+		return html
+	
 	def validate(self):
 		"""Validate agreement before save."""
 		self.validate_dates()
