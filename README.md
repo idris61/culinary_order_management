@@ -42,6 +42,10 @@ Bu uygulama, ERPNext üzerinde çoklu şirket yapısında çalışan bir sipari�
 - ✅ **Scheduled job ile otomatik fiyat yönetimi**
 - ✅ **Price List aktivasyon kontrolü** (aktif anlaşma varsa enabled)
 - ✅ **Çoklu tedarikçi desteği** (fiyat çakışması yok)
+- ✅ **🆕 Dinamik Fiyat Güncelleme** (Standard Selling değişince otomatik güncelleme)
+- ✅ **🆕 Virtual Field Sistemi** (güncel vs orijinal fiyat karşılaştırma)
+- ✅ **🆕 Price History Child Table** (tüm fiyat değişiklikleri kayıt altında)
+- ✅ **🆕 Multi-Update Desteği** (2., 3., N. güncellemeler otomatik)
 
 ### 2. Sales Order Validation (Sipariş Doğrulama)
 - ✅ Anlaşma kontrolü (sadece anlaşmalı ürünler)
@@ -77,23 +81,24 @@ Bu uygulama, ERPNext üzerinde çoklu şirket yapısında çalışan bir sipari�
 ```
 Culinary Order Management
 │
-├── DocTypes (4)
-│   ├── Agreement (Ana DocType)
+├── DocTypes (5)
+│   ├── Agreement (Ana DocType, Submittable)
 │   ├── Agreement Item (Child Table)
+│   ├── 🆕 Agreement Item Price History (Child Table)
 │   ├── Proforma Invoice (Ana DocType)
 │   └── Proforma Invoice Item (Child Table)
 │
 ├── Backend (Python)
 │   ├── sales_order.py         # SO validation & pricing
 │   ├── sales_order_hooks.py   # SO split & routing
-│   ├── agreement.py           # Price list sync
+│   ├── agreement.py           # Price list sync & 🆕 dynamic pricing
 │   ├── proforma_hooks.py      # Proforma generation
 │   ├── api.py                 # Whitelisted APIs
 │   ├── custom_datev.py        # DATEV override
 │   └── setup.py               # Installation hooks
 │
 ├── Frontend (JavaScript)
-│   ├── agreement.js           # Agreement form logic
+│   ├── agreement.js           # Agreement form logic & 🆕 price history UI
 │   ├── agreement_list.js      # List view indicators (status colors)
 │   └── sales_order.js         # Sales Order form logic
 │
@@ -102,7 +107,7 @@ Culinary Order Management
 │   └── SO.source_web_so       # Parent SO referansı
 │
 └── Hooks
-    ├── doc_events             # Document lifecycle hooks
+    ├── doc_events             # 🆕 Item Price hook (dynamic pricing)
     ├── doctype_js             # Client script injection
     └── scheduler_events       # Daily tasks (agreement status updates)
 ```
@@ -168,15 +173,59 @@ update_all_agreement_statuses()
 #    - "Active" → "Expired": Fiyatları temizle
 # 3. Price List aktivasyonunu güncelle
 # 4. Expired olanları otomatik cancel eder (docstatus=2)
+
+🆕 sync_agreement_prices_on_standard_change(doc, method)
+# Standard Selling fiyat değiştiğinde otomatik çalışır (Hook)
+# - Item Price (Standard Selling) güncellendiğinde tetiklenir
+# - İlgili tüm aktif Agreement'ları bulur
+# - Discount oranını uygulayarak yeni fiyatı hesaplar
+# - Item Price kayıtlarını otomatik günceller
+# - Price History'ye kayıt ekler
+# - Multi-update desteği (2., 3., N. güncellemeler)
+
+🆕 update_agreement_item_price(...)
+# Agreement'ın Item Price kaydını güncelle
+# - Eski fiyatı okur (log için)
+# - Yeni fiyatı set eder
+# - Commit eder
+# - (success, old_price) tuple döndürür
+
+🆕 manual_update_agreement_prices(agreement_name)
+# Manuel fiyat güncelleme API (opsiyonel)
+# - Tüm ürünleri Standard Selling'den yeniden hesaplar
+# - Item Price'ları günceller
+# - Price History'ye kayıt ekler
+
+🆕 create_price_change_log(...)
+# Fiyat değişikliğini Price History child table'a kaydet
+# - Eski ve yeni fiyatları
+# - Değişim yüzdesini
+# - Kullanıcı ve kaynak bilgisini (Automatic/Manual)
+# - Tarih/saat bilgisini
+
+🆕 clear_price_history(agreement_name, item_code)
+# Price History'yi temizle (opsiyonel)
+# - Tüm geçmişi veya belirli ürün geçmişini sil
+# - UI'den buton ile de kullanılabilir
 ```
 
 **Veri Akışı:**
 ```
-Agreement → Price List → Item Price
+Agreement → Price List → Item Price → Portal/Sales Order
+
+🆕 Dinamik Fiyat Güncelleme Akışı:
+Standard Selling (Item Price) Güncellendi
+         ↓ (Hook: after_insert / on_update)
+sync_agreement_prices_on_standard_change()
          ↓
-    Item Query
+Aktif Agreement'ları Bul (SQL Query)
          ↓
-    Sales Order
+Her Agreement için:
+  - Discount hesapla (new_price = standard × (1 - discount/100))
+  - Item Price güncelle
+  - Price History'ye kaydet
+         ↓
+Portal: Anında güncel fiyat gösterir ✅
 ```
 
 **Agreement Yaşam Döngüsü:**
@@ -709,6 +758,20 @@ print(datev.attach_print)  # attach_print_custom olmalı
 
 ## 📝 Changelog
 
+### v0.0.4 (2025-11-10)
+- ✅ **Dinamik Fiyat Güncelleme Sistemi**
+  - Standard Selling fiyat değişiminde otomatik Agreement güncelleme
+  - Item Price hook (after_insert + on_update)
+  - Multi-update desteği (sınırsız güncelleme)
+  - Virtual field'lar (current_standard_rate, current_agreement_rate)
+  - Price History child table (tüm fiyat değişiklikleri kayıt altında)
+  - Agreement Item Price History DocType
+  - Price history silme API'leri (clear_price_history, delete_price_history_row)
+  - Standard Selling Price List migrasyon
+  - Türkçe çeviriler eklendi
+  - Tablo görünümünde güncel fiyatlar
+- ✅ Code optimization & testing
+
 ### v0.0.3 (2025-11-06)
 - ✅ **Agreement Geliştirmeleri**
   - Otomatik adlandırma: `{customer}-{supplier}-{####}`
@@ -760,6 +823,6 @@ MIT License
 
 ---
 
-**Son Güncelleme:** 2025-11-06
+**Son Güncelleme:** 2025-11-10
 **ERPNext Version:** v15
 **Frappe Version:** v15
