@@ -924,22 +924,18 @@ def update_agreement_item_price(
 		
 		# ÖNCE eski fiyatı al
 		item_price_name = existing[0]
-		old_price = frappe.db.get_value("Item Price", item_price_name, "price_list_rate")
+		item_price_doc = frappe.get_doc("Item Price", item_price_name)
+		old_price = item_price_doc.price_list_rate
 		
-		# Item Price'ı güncelle
-		frappe.db.set_value(
-			"Item Price",
-			item_price_name,
-			"price_list_rate",
-			new_price,
-			update_modified=True
-		)
+		# Item Price'ı güncelle (ORM ile - hook'lar tetiklenir!)
+		item_price_doc.price_list_rate = new_price
+		item_price_doc.save(ignore_permissions=True)
 		
 		# Commit et (önemli!)
 		frappe.db.commit()
 		
 		frappe.logger().info(
-			f"Item Price {item_price_name} updated: {old_price} → {new_price} {currency}"
+			f"Item Price {item_price_name} updated: {old_price} → {new_price} {currency} (ORM - hooks triggered)"
 		)
 		
 		return (True, float(old_price) if old_price else 0)
