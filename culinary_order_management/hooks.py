@@ -77,7 +77,17 @@ doctype_list_js = {
 
 # Fixtures
 # ----------
-fixtures = ["custom_field.json"]
+# Test data fixtures removed - causing duplicate Item Price errors during migration
+# Item and Item Price fixtures should be imported manually if needed
+fixtures = [
+	{
+		"dt": "Custom Field",
+		"filters": [
+			["name", "in", ["Item-supplier_display"]]
+		]
+	}
+	# Item ve Item Price fixture'ları kaldırıldı (migration duplicate hatası)
+]
 
 # Jinja
 # ----------
@@ -145,16 +155,13 @@ doc_events = {
 		"validate": "culinary_order_management.culinary_order_management.sales_order.validate_sales_order",
 		# "after_submit": "culinary_order_management.culinary_order_management.sales_order_hooks.split_order_to_companies",  # Otomatik bölme devre dışı - sadece manuel buton ile
 	},
-	"Agreement": {
-		"after_submit": [
-			"culinary_order_management.culinary_order_management.agreement.create_price_list_for_agreement",
-		],
-		"on_update_after_submit": [
-			"culinary_order_management.culinary_order_management.agreement.sync_item_prices",
-		],
-		"on_cancel": [
-			"culinary_order_management.culinary_order_management.agreement.cleanup_item_prices",
-		],
+	# Agreement hooks - Artık Agreement class içinde direkt çağrılıyor (agreement.py)
+	# Fiyat yönetimi: on_submit → create_price_list, on_update_after_submit → sync_prices, on_cancel → cleanup_prices
+	
+	# Item Price hook - Standard Selling fiyat güncellendiğinde Agreement'ları otomatik güncelle
+	"Item Price": {
+		"after_insert": "culinary_order_management.culinary_order_management.agreement.sync_agreement_prices_on_standard_change",
+		"on_update": "culinary_order_management.culinary_order_management.agreement.sync_agreement_prices_on_standard_change",
 	},
 }
 

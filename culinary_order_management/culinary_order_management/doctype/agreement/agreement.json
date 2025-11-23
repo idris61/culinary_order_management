@@ -1,6 +1,6 @@
 {
  "actions": [],
- "autoname": "format:{customer} - {supplier}",
+ "autoname": "format:{customer}-{supplier}-{####}",
  "creation": "2025-10-15 10:02:35.199602",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -18,7 +18,9 @@
   "section_pricing",
   "price_list",
   "section_items",
-  "agreement_items"
+  "agreement_items",
+  "section_price_history",
+  "price_history"
  ],
  "fields": [
   {
@@ -119,6 +121,21 @@
    "label": "Items",
    "options": "Agreement Item",
    "reqd": 1
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:!doc.__islocal",
+   "fieldname": "section_price_history",
+   "fieldtype": "Section Break",
+   "label": "Price Change History"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "price_history",
+   "fieldtype": "Table",
+   "label": "Price History",
+   "options": "Agreement Item Price History",
+   "read_only": 1
   }
  ],
  "is_submittable": 1,
