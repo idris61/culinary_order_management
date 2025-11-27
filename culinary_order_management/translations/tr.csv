@@ -65,3 +65,13 @@ User Forum,Kullanıcı Forumu,
 Valid From,Geçerlilik Başlangıç Tarihi,
 Valid To,Geçerlilik Bitiş Tarihi,
 View Website,Websitesine Git,
+Add Customer Note,Müşteri Notu Ekle
+Note,Not
+You can add a note for the customer before approving the agreement.,Agreement onaylanmadan önce müşteri için bir not ekleyebilirsiniz.
+Save and Continue,Kaydet ve Devam Et
+Continue (Don't Add Note),Devam Et (Not Eklemeyin)
+Active agreement exists for this customer-supplier:,Bu müşteri-tedarikçi için aktif anlaşma mevcut:
+Do you want to cancel the existing agreement and approve the new agreement?,Mevcut anlaşmayı iptal edip yeni anlaşmayı onaylamak istiyor musunuz?
+Processing...,İşleniyor...
+Operation failed,İşlem başarısız oldu
+Agreement remained as draft,Anlaşma taslak olarak kaldı

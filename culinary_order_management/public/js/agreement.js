@@ -82,6 +82,192 @@ frappe.ui.form.on('Agreement', {
             apply_agreement_discount(frm);
         });
     },
+    
+    before_submit: function(frm) {
+        // Önce customer notes modal'ını aç
+        return new Promise((resolve, reject) => {
+            // Modal dialog oluştur
+            const dialog = new frappe.ui.Dialog({
+                title: __('Add Customer Note'),
+                fields: [
+                    {
+                        fieldtype: 'Small Text',
+                        fieldname: 'customer_note',
+                        label: __('Note'),
+                        reqd: 0,
+                        description: __('You can add a note for the customer before approving the agreement.')
+                    }
+                ],
+                primary_action_label: __('Save and Continue'),
+                primary_action: function(values) {
+                    // Not varsa custom_customer_note alanına yaz
+                    if (values.customer_note && values.customer_note.trim()) {
+                        frm.set_value('custom_customer_note', values.customer_note.trim());
+                    }
+                    
+                    dialog.hide();
+                    
+                    // Modal kapandıktan sonra mevcut aktif anlaşma kontrolünü yap
+                    if (frm.doc.customer && frm.doc.supplier) {
+                        frappe.call({
+                            method: 'culinary_order_management.culinary_order_management.doctype.agreement.agreement.check_active_agreement',
+                            args: {
+                                customer: frm.doc.customer,
+                                supplier: frm.doc.supplier,
+                                current_agreement: frm.doc.name
+                            },
+                            async: false,
+                            callback: function(r) {
+                                if (r.message && r.message.has_active) {
+                                    // Aktif anlaşma var - dialog göster
+                                    const agreements = r.message.agreements;
+                                    const agreement_list = agreements.map(a => 
+                                        `${a.name} (${a.valid_from} - ${a.valid_to})`
+                                    ).join('<br>');
+                                    
+                                    frappe.confirm(
+                                        `<strong>${__('Active agreement exists for this customer-supplier:')}</strong><br><br>${agreement_list}<br><br>${__('Do you want to cancel the existing agreement and approve the new agreement?')}`,
+                                        () => {
+                                            // Evet - eski anlaşmayı cancel et, yeni anlaşmayı submit et
+                                            frappe.call({
+                                                method: 'culinary_order_management.culinary_order_management.doctype.agreement.agreement.replace_agreement',
+                                                args: {
+                                                    old_agreement: agreements[0].name,
+                                                    new_agreement: frm.doc.name
+                                                },
+                                                freeze: true,
+                                                freeze_message: __('Processing...'),
+                                                callback: function(r) {
+                                                    if (r.message && r.message.success) {
+                                                        frappe.show_alert({
+                                                            message: r.message.message,
+                                                            indicator: 'green'
+                                                        });
+                                                        // Sayfa reload - tekrar submit etme
+                                                        setTimeout(() => {
+                                                            frm.reload_doc();
+                                                        }, 500);
+                                                    }
+                                                },
+                                                error: function(r) {
+                                                    frappe.msgprint({
+                                                        title: __('Error'),
+                                                        indicator: 'red',
+                                                        message: r.message || __('Operation failed')
+                                                    });
+                                                }
+                                            });
+                                            // Submit işlemini durdur (replace_agreement içinde zaten submit ediliyor)
+                                            reject();
+                                        },
+                                        () => {
+                                            // Hayır - submit işlemini iptal et
+                                            frappe.show_alert({
+                                                message: __('Agreement remained as draft'),
+                                                indicator: 'orange'
+                                            });
+                                            reject();
+                                        }
+                                    );
+                                } else {
+                                    // Aktif anlaşma yok - normal submit devam etsin
+                                    resolve();
+                                }
+                            },
+                            error: function() {
+                                reject();
+                            }
+                        });
+                    } else {
+                        // Customer ve supplier yoksa direkt resolve
+                        resolve();
+                    }
+                },
+                secondary_action_label: __('Continue (Don\'t Add Note)'),
+                secondary_action: function() {
+                    // Not eklenmeden devam et, mevcut aktif anlaşma kontrolünü yap
+                    dialog.hide();
+                    
+                    if (frm.doc.customer && frm.doc.supplier) {
+                        frappe.call({
+                            method: 'culinary_order_management.culinary_order_management.doctype.agreement.agreement.check_active_agreement',
+                            args: {
+                                customer: frm.doc.customer,
+                                supplier: frm.doc.supplier,
+                                current_agreement: frm.doc.name
+                            },
+                            async: false,
+                            callback: function(r) {
+                                if (r.message && r.message.has_active) {
+                                    // Aktif anlaşma var - dialog göster
+                                    const agreements = r.message.agreements;
+                                    const agreement_list = agreements.map(a => 
+                                        `${a.name} (${a.valid_from} - ${a.valid_to})`
+                                    ).join('<br>');
+                                    
+                                    frappe.confirm(
+                                        `<strong>${__('Active agreement exists for this customer-supplier:')}</strong><br><br>${agreement_list}<br><br>${__('Do you want to cancel the existing agreement and approve the new agreement?')}`,
+                                        () => {
+                                            // Evet - eski anlaşmayı cancel et, yeni anlaşmayı submit et
+                                            frappe.call({
+                                                method: 'culinary_order_management.culinary_order_management.doctype.agreement.agreement.replace_agreement',
+                                                args: {
+                                                    old_agreement: agreements[0].name,
+                                                    new_agreement: frm.doc.name
+                                                },
+                                                freeze: true,
+                                                freeze_message: __('Processing...'),
+                                                callback: function(r) {
+                                                    if (r.message && r.message.success) {
+                                                        frappe.show_alert({
+                                                            message: r.message.message,
+                                                            indicator: 'green'
+                                                        });
+                                                        // Sayfa reload - tekrar submit etme
+                                                        setTimeout(() => {
+                                                            frm.reload_doc();
+                                                        }, 500);
+                                                    }
+                                                },
+                                                error: function(r) {
+                                                    frappe.msgprint({
+                                                        title: __('Error'),
+                                                        indicator: 'red',
+                                                        message: r.message || __('Operation failed')
+                                                    });
+                                                }
+                                            });
+                                            // Submit işlemini durdur (replace_agreement içinde zaten submit ediliyor)
+                                            reject();
+                                        },
+                                        () => {
+                                            // Hayır - submit işlemini iptal et
+                                            frappe.show_alert({
+                                                message: __('Agreement remained as draft'),
+                                                indicator: 'orange'
+                                            });
+                                            reject();
+                                        }
+                                    );
+                                } else {
+                                    // Aktif anlaşma yok - normal submit devam etsin
+                                    resolve();
+                                }
+                            },
+                            error: function() {
+                                reject();
+                            }
+                        });
+                    } else {
+                        // Customer ve supplier yoksa direkt resolve
+                        resolve();
+                    }
+                }
+            });
+            
+            dialog.show();
+        });
+    }
 });
 
 function apply_agreement_discount(frm) {
